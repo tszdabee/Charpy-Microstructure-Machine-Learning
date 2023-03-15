@@ -11,8 +11,9 @@ import tensorflow.keras as keras
 from keras.models import Sequential
 from keras.layers import Dense, Conv2D, BatchNormalization, Dropout, MaxPool2D, Input, Softmax, Activation, Flatten
 from keras.utils.np_utils import to_categorical  # convert categorical form
+from tensorflow.keras.losses import MeanAbsoluteError, MeanAbsolutePercentageError #losses
 from tensorflow.keras.preprocessing.image import ImageDataGenerator  # image augmentation
-
+from sklearn.preprocessing import MinMaxScaler
 
 # Function to compile all train/test data with outputs into array
 def getdata(folder):
@@ -25,13 +26,13 @@ def getdata(folder):
         if not ms_type.startswith('.'):  # Avoid .DStore hidden file for images on Mac
             # Assign labels based on subdirectory folder (Previously sorted)
             if ms_type in ['Sample01']:
-                output = 1
+                output = 213
             elif ms_type in ['Sample02']:
-                output = 2
+                output = 238
             elif ms_type in ['Sample03']:
-                output = 3
+                output = 180
             elif ms_type in ['Sample04']:
-                output = 4
+                output = 190
             else:  # Edge case, should not occur - All images are in folders
                 output = 0
 
@@ -75,18 +76,18 @@ train_datagen = ImageDataGenerator(
     # zoom_range=[5,0.5]
 )
 train_datagen.fit(X_train)
+#scale fit outputs, inverse scale later to obtain real values. helps converge faster
+scaler = MinMaxScaler()
+y_train = scaler.fit_transform(y_train.reshape(-1, 1)).reshape(-1,)
+y_val = scaler.transform(y_val.reshape(-1, 1)).reshape(-1,)
+y_test = scaler.transform(y_test.reshape(-1, 1)).reshape(-1,)
 
 # Normalization of image data, resize from 0-255 to 0-1
 # X_train = X_train / 255 #removed, since rescale from Data Augmentation implements this
 # X_test = X_test / 255 # REMOVED rescale, efficientNet has in-built normalization
 
-# Categorical to encode into hot vectors. Note arg 0 represents no images
-y_train_binary = to_categorical(y_train)
-y_test_binary = to_categorical(y_test)
-y_val_binary = to_categorical(y_val)
-
 print("Shape for X_train: ", np.shape(X_train))
-print("Shape for y_train: ", np.shape(y_train_binary))
+print("Shape for y_train: ", np.shape(y_train))
 
 # Create dataframe from labels
 df_train = pd.DataFrame({'train_label': y_train})
@@ -133,8 +134,8 @@ plt.show()
 X_train = np.asarray([(np.dstack([X_train[i], X_train[i], X_train[i]])) for i in range(len(X_train))])
 X_val = np.asarray([(np.dstack([X_val[i], X_val[i], X_val[i]])) for i in range(len(X_val))])
 X_test = np.asarray([(np.dstack([X_test[i], X_test[i], X_test[i]])) for i in range(len(X_test))])
-# Use EfficientNetB4
-tmp = tf.keras.applications.EfficientNetB4(include_top=False,  # Now acts as feature extraction
+# Use EfficientNetB0
+tmp = tf.keras.applications.EfficientNetB0(include_top=False,  # Now acts as feature extraction
                                            # Include_top lets you select if you want the fully connected final dense layers at end of the model.
                                            # This is usually what you want if you want the model to actually perform classification.
                                            # With include_top=True you can specify the parameter classes (defaults to 1000 for ImageNet).
@@ -143,7 +144,7 @@ tmp = tf.keras.applications.EfficientNetB4(include_top=False,  # Now acts as fea
                                            weights='imagenet',
                                            # input_tensor=new_input,
                                            pooling='max',
-                                           classes=5,  # number of output classes
+                                           #classes=5,  # number of output classes
                                            classifier_activation='softmax',
                                            drop_connect_rate=0.2)  # dropout of 0.5 instead of 0.2 default, prevent overfit
 # Freeze pretrained model layers
@@ -156,63 +157,84 @@ model.add(Flatten())  # flattening the output feature maps, only use GlobalAvera
 model.add(BatchNormalization())
 # model.add(Dense(16, activation='relu'))
 model.add(Dropout(rate=0.45))  # prevent overfit with regularization dropout
-model.add(Dense(5, activation='softmax'))  # softmax for hot encode. CHANGE LATER for single prediction output
+model.add(Dense(1)) #no activation func
 
 model.summary()
 
 # Compile model
 opt = keras.optimizers.Adam(learning_rate=1e-1)
-model.compile(loss='categorical_crossentropy',
+model.compile(loss='mean_absolute_error',
               optimizer="adam",
-              metrics=['accuracy'])
+              metrics=[MeanAbsoluteError(), MeanAbsolutePercentageError()])
 
 # Training model
 # checkpoint to save best models
-filepath = "/Users/tszdabee/Desktop/FYP_Code/Model/EffNetB4.1e-1.weights.best.hdf5"
-checkpoint = keras.callbacks.ModelCheckpoint(filepath, monitor='val_accuracy', verbose=1, save_best_only=True,
-                                             mode='max')  # Save new model if improves validation acc
-es = keras.callbacks.EarlyStopping(monitor='val_accuracy', patience=8)  # stop running after 6 epochs no improvement
+filepath = "/Users/tszdabee/Desktop/FYP_Code/Model/test.b0.hdf5"
+checkpoint = keras.callbacks.ModelCheckpoint(filepath, monitor="val_mean_absolute_percentage_error", verbose=1, save_best_only=True,
+                                             mode='min')  # Save new model if error decreases
+es = keras.callbacks.EarlyStopping(monitor="val_mean_absolute_percentage_error", patience=5, restore_best_weights=True)  # stop running after 5 epochs no improvement
 callbacks_list = [checkpoint, es]
-history = model.fit(train_datagen.flow(X_train, y_train_binary, batch_size=16),
+history = model.fit(train_datagen.flow(X_train, y_train, batch_size=16),
                     # 16 image augmentations during each epoch of training
-                    epochs=40,
+                    epochs=50,
                     batch_size=32,
-                    validation_data=(X_val, y_val_binary),  # from TEST: 80% training, 10% validation, 10% testing
+                    validation_data=(X_val, y_val),  # from TEST: 80% training, 10% validation, 10% testing
                     callbacks=callbacks_list,  # save callbacks
                     verbose=1)
 
 # Summarize Train/Validation Accuracy and Loss over epochs.
-plt.style.use('ggplot')
-plt.figure(figsize=(12, 12))
-plt.subplot(2, 2, 1)
-plt.plot(history.history['accuracy'])
-plt.plot(history.history['val_accuracy'])
-plt.title('Model Training and Validation Accuracy')
-plt.ylabel('Accuracy', fontsize=12)
-plt.xlabel('Epoch', fontsize=12)
-plt.legend(['train accuracy', 'validation accuracy'], loc='lower right', prop={'size': 12})
+# plt.style.use('ggplot')
+# plt.figure(figsize=(12, 12))
+# plt.subplot(2, 2, 1)
+# plt.plot(history.history['accuracy'])
+# plt.plot(history.history['val_accuracy'])
+# plt.title('Model Training and Validation Accuracy')
+# plt.ylabel('Accuracy', fontsize=12)
+# plt.xlabel('Epoch', fontsize=12)
+# plt.legend(['train accuracy', 'validation accuracy'], loc='lower right', prop={'size': 12})
+#
+# plt.subplot(2, 2, 2)
+# plt.plot(history.history['loss'])
+# plt.plot(history.history['val_loss'])
+# plt.title('Model Training and Validation Loss')
+# plt.ylabel('Loss', fontsize=12)
+# plt.xlabel('Epoch', fontsize=12)
+# plt.legend(['train loss', 'validation loss'], loc='best', prop={'size': 12})
 
-plt.subplot(2, 2, 2)
-plt.plot(history.history['loss'])
-plt.plot(history.history['val_loss'])
-plt.title('Model Training and Validation Loss')
-plt.ylabel('Loss', fontsize=12)
-plt.xlabel('Epoch', fontsize=12)
-plt.legend(['train loss', 'validation loss'], loc='best', prop={'size': 12})
+loss = history.history['loss']
+epochs = range(1, len(loss)+1)
+plt.plot(epochs, loss, 'ro', label='Training loss')
+plt.legend()
+plt.show()
+
+
 
 # Basic predict + evaluation with unseen test data
-# model = keras.models.load_model("/Users/tszdabee/Desktop/FYP_Code/Model/EffNetB4.1e-1.weights.best.hdf5")
-test_loss, test_acc = model.evaluate(X_test, y_test_binary, verbose=1)
-print("The accuracy of the model is: ", test_acc)
-print("The loss of the model is: ", test_loss)
-
-# Further detailed evaluation for analysis
-y_pred_prob = model.predict(X_test)  # predicts output in one hot encoded form [0.9 0.1 0]
-y_pred = np.argmax(y_pred_prob, axis=1)  # select argmax with highest probability to match y_test
-from sklearn.metrics import classification_report  # Confusion matrix
+model = keras.models.load_model("/Users/tszdabee/Desktop/FYP_Code/Model/test.b0.hdf5")
+#test_loss = model.evaluate(X_test, y_test, verbose=1)
+#print("The accuracy of the model is: ", test_acc)
+#print("The loss of the model is: ", test_loss)
 
 
-print(classification_report(y_test, y_pred)) # y_test instead of one hot encoded with original labels.
+y_train = scaler.inverse_transform(y_train.reshape(-1, 1)).reshape(-1,)
+y_val = scaler.inverse_transform(y_val.reshape(-1, 1)).reshape(-1,)
+y_test = scaler.inverse_transform(y_test.reshape(-1, 1)).reshape(-1,)
+
+hist = history.history['val_mean_absolute_error']
+hist = [x*scaler.data_range_[0] for x in hist] #inverse scale mae for visualization
+plt.plot(hist)
+plt.title('Model Training and Validation Mean Abs Error (J)')
+plt.ylabel('Mean Absolute Error', fontsize=12)
+plt.xlabel('Epoch', fontsize=12)
+plt.legend(['mean absolute error'], loc='best', prop={'size': 12})
+
+# # Further detailed evaluation for analysis
+#y_pred = scaler.inverse_transform(model.predict(X_test)).reshape(-1,)  # predicts output
+# from sklearn.metrics import classification_report  # Confusion matrix
+#
+#
+# print(classification_report(y_test, y_pred)) # y_test instead of one hot encoded with original labels.
+
 
 
 # plot architecture (Not working very well at the moment, will conduct manually with model summary)
