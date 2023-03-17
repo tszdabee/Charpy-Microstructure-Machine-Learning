@@ -21,18 +21,16 @@ def getdata(folder):
     X = []  # X is Greyscale image array input
     y = []  # y is Charpy classification output
 
+    # load charpy results into dataframe to compile
+    df = pd.read_csv('charpy_results.csv')
+    results_dict = dict(zip(df['sample_name'], df['impact_energy_j'])) #dictionary with sample name as keys, impact energy as values. (Add temperature as input later)
+
     # Loops through all files in subdirectories in selected folder
     for ms_type in os.listdir(folder):
         if not ms_type.startswith('.'):  # Avoid .DStore hidden file for images on Mac
             # Assign labels based on subdirectory folder (Previously sorted)
-            if ms_type in ['Sample01']:
-                output = 213
-            elif ms_type in ['Sample02']:
-                output = 238
-            elif ms_type in ['Sample03']:
-                output = 180
-            elif ms_type in ['Sample04']:
-                output = 190
+            if ms_type in results_dict:
+                output = results_dict[ms_type]
             else:  # Edge case, should not occur - All images are in folders
                 output = 0
 
@@ -47,7 +45,7 @@ def getdata(folder):
                         # Append values to X,y
                         X.append(img_bw)
                         y.append(output)
-                        # print(image_filename, output) # For debugging with filenames and output check
+                        print(image_filename, output) # For debugging with filenames and output check
     return np.asarray(X), np.asarray(y)
 
 
