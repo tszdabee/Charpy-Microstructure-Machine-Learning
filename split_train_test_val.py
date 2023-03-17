@@ -38,20 +38,20 @@ for sample_dir in os.listdir(os.path.join(main_dir)):# s01,2,3,4
 
         # Calculate the number of files to use for training, testing, and validation
         num_files = len(file_list)
-        num_train = int(num_files * train_proportion)
-        num_test = int(num_files * test_proportion)
-        num_val = int(num_files * val_proportion)
+        num_train = round(num_files * train_proportion)
+        num_test = round(num_files * test_proportion)
+        num_val = round(num_files * val_proportion)
 
         # Loop through the files in the shuffled list and copy them to the appropriate directory
         for i, file_name in enumerate(file_list):
             # Check file extension and ensure images selected
             if file_name.endswith(('.jpg', '.png', '.jpeg', '.tif')):
-                if i < num_train:
+                if i < num_train: #training data
                     shutil.copy(os.path.join(main_dir, sample_dir, file_name),
                                 os.path.join(output_dir, train_dir, sample_dir, file_name))
-                elif i < num_train + num_test:
+                elif i < num_train + num_test: #testing data
                     shutil.copy(os.path.join(main_dir, sample_dir, file_name),
                                 os.path.join(output_dir, test_dir, sample_dir, file_name))
-                else:
+                else:# validation data
                     shutil.copy(os.path.join(main_dir, sample_dir, file_name),
                                 os.path.join(output_dir, val_dir, sample_dir, file_name))
