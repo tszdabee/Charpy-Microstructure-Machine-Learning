@@ -9,7 +9,7 @@ from PIL import Image  # read images
 import tensorflow as tf  # tensorflow
 import tensorflow.keras as keras
 from keras.models import Sequential
-from keras.layers import Dense, Conv2D, BatchNormalization, Dropout, MaxPool2D, Input, Softmax, Activation, Flatten
+from keras.layers import Dense, Conv2D, BatchNormalization, Dropout, MaxPool2D, Input, Softmax, Activation, Flatten, Concatenate, Lambda
 from keras.utils.np_utils import to_categorical  # convert categorical form
 from tensorflow.keras.losses import MeanAbsoluteError, MeanAbsolutePercentageError #losses
 from tensorflow.keras.preprocessing.image import ImageDataGenerator  # image augmentation
@@ -19,18 +19,21 @@ from sklearn.preprocessing import MinMaxScaler
 def getdata(folder):
     # Initialize empty arrays for input/output
     X = []  # X is Greyscale image array input
+    X_temp = [] # X_temp is corresponding temperature input
     y = []  # y is Charpy classification output
 
     # load charpy results into dataframe to compile
     df = pd.read_csv('charpy_results.csv')
-    results_dict = dict(zip(df['sample_name'], df['impact_energy_j'])) #dictionary with sample name as keys, impact energy as values. (Add temperature as input later)
+    energy_dict = dict(zip(df['sample_name'], df['impact_energy_j'])) #dictionary with sample name as keys, impact energy as values.
+    temp_dict = dict(zip(df['sample_name'], df['temp_c']))  # dictionary with sample name as keys, temp as values.
 
     # Loops through all files in subdirectories in selected folder
     for ms_type in os.listdir(folder):
         if not ms_type.startswith('.'):  # Avoid .DStore hidden file for images on Mac
             # Assign labels based on subdirectory folder (Previously sorted)
-            if ms_type in results_dict:
-                output = results_dict[ms_type]
+            if ms_type in energy_dict:
+                output = energy_dict[ms_type]
+                temp = temp_dict[ms_type]
             else:  # Edge case, should not occur - All images are in folders
                 output = 0
 
@@ -44,9 +47,11 @@ def getdata(folder):
 
                         # Append values to X,y
                         X.append(img_bw)
+                        X_temp.append(temp)
                         y.append(output)
-                        print(image_filename, output) # For debugging with filenames and output check
-    return np.asarray(X), np.asarray(y)
+                        
+                        #print(image_filename, output, temp) # For debugging with filenames and output check
+    return np.asarray(X), np.asarray(X_temp), np.asarray(y)
 
 
 # Define filepaths and directories
@@ -56,9 +61,9 @@ test_path = os.path.join(main_dir, 'TEST')
 val_path = os.path.join(main_dir, 'VAL')
 
 # Extract training and test data with getdata function defined
-X_train, y_train = getdata(train_path)
-X_test, y_test = getdata(test_path)
-X_val, y_val = getdata(val_path)
+X_train, X_train_temp, y_train = getdata(train_path)
+X_test, X_test_temp, y_test = getdata(test_path)
+X_val, X_val_temp, y_val = getdata(val_path)
 
 # Data augmentation settings as "datagen"
 train_datagen = ImageDataGenerator(
@@ -74,6 +79,7 @@ train_datagen = ImageDataGenerator(
     # zoom_range=[5,0.5]
 )
 train_datagen.fit(X_train)
+
 #scale fit outputs, inverse scale later to obtain real values. helps converge faster
 scaler = MinMaxScaler()
 y_train = scaler.fit_transform(y_train.reshape(-1, 1)).reshape(-1,)
@@ -132,13 +138,12 @@ plt.show()
 X_train = np.asarray([(np.dstack([X_train[i], X_train[i], X_train[i]])) for i in range(len(X_train))])
 X_val = np.asarray([(np.dstack([X_val[i], X_val[i], X_val[i]])) for i in range(len(X_val))])
 X_test = np.asarray([(np.dstack([X_test[i], X_test[i], X_test[i]])) for i in range(len(X_test))])
+# input params shape definition
+img_size = len(X_train[0])
+img_input = Input(shape=(img_size, img_size, 3)) #image input shape
+temp_input = Input(shape=(1,), name='temp_input') #define temp input shape
 # Use EfficientNetB0
-tmp = tf.keras.applications.EfficientNetB0(include_top=False,  # Now acts as feature extraction
-                                           # Include_top lets you select if you want the fully connected final dense layers at end of the model.
-                                           # This is usually what you want if you want the model to actually perform classification.
-                                           # With include_top=True you can specify the parameter classes (defaults to 1000 for ImageNet).
-                                           # With include_top=False, the model can be used for feature extraction,
-                                           # Note that input_shape and pooling parameters should only be specified when include_top is False.
+base_model = tf.keras.applications.EfficientNetB0(include_top=False,  # Now acts as feature extraction
                                            weights='imagenet',
                                            # input_tensor=new_input,
                                            pooling='max',
@@ -146,16 +151,17 @@ tmp = tf.keras.applications.EfficientNetB0(include_top=False,  # Now acts as fea
                                            classifier_activation='softmax',
                                            drop_connect_rate=0.2)  # dropout of 0.5 instead of 0.2 default, prevent overfit
 # Freeze pretrained model layers
-for layer in tmp.layers:
+for layer in base_model.layers:
     layer.trainable = False
 # Define model
-model = Sequential()
-model.add(tmp)  # adding EfficientNetB4
-model.add(Flatten())  # flattening the output feature maps, only use GlobalAveragePooling2D if
-model.add(BatchNormalization())
-# model.add(Dense(16, activation='relu'))
-model.add(Dropout(rate=0.45))  # prevent overfit with regularization dropout
-model.add(Dense(1)) #no activation func
+x = base_model(img_input)
+x = Flatten()(x)
+x = Concatenate()([x, temp_input]) #concatenate temp feature at end of EffNet feature extraction, after Flatten
+x = BatchNormalization()(x)
+x = Dropout(rate=0.45)(x)
+output = Dense(1)(x)
+
+model = tf.keras.Model(inputs=[img_input, temp_input], outputs=output)
 
 model.summary()
 
