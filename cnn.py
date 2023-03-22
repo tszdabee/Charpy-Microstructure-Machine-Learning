@@ -155,12 +155,15 @@ base_model = tf.keras.applications.EfficientNetB0(include_top=False,  # Now acts
 # Freeze pretrained model layers
 for layer in base_model.layers:
     layer.trainable = False
-# Define model
-x = base_model(img_input)
+# Define model (image branch)
+x = base_model(img_input) # image branch
 x = Flatten()(x)
-x = Concatenate()([x, temp_input]) #concatenate temp feature at end of EffNet feature extraction, after Flatten
 x = BatchNormalization()(x)
 x = Dropout(rate=0.45)(x)
+temp_input = Input(shape=(1,)) #temperature branch
+t = Dense(16, activation='relu')(temp_input)
+x = Concatenate()([x, t]) #concatenate temp feature at end of EffNet feature extraction
+
 output = Dense(1)(x)
 
 model = tf.keras.Model(inputs=[img_input, temp_input], outputs=output)
@@ -175,14 +178,14 @@ class_weights_dict = dict(enumerate(class_weights))
 opt = keras.optimizers.Adam(learning_rate=1e-3)
 model.compile(loss='mean_absolute_error',
               optimizer="adam",
-              metrics=[MeanAbsoluteError(), MeanAbsolutePercentageError()])
+              metrics=[MeanAbsoluteError()])
 
 # Training model
 # checkpoint to save best models
 filepath = "/Users/tszdabee/Desktop/FYP_Code/Model/test.b0.hdf5"
-checkpoint = keras.callbacks.ModelCheckpoint(filepath, monitor="val_mean_error", verbose=1, save_best_only=True,
+checkpoint = keras.callbacks.ModelCheckpoint(filepath, monitor="val_mean_absolute_error", verbose=1, save_best_only=True,
                                              mode='min')  # Save new model if error decreases
-es = keras.callbacks.EarlyStopping(monitor="val_mean_absolute_percentage_error", patience=5, restore_best_weights=True)  # stop running after 5 epochs no improvement
+es = keras.callbacks.EarlyStopping(monitor="val_mean_absolute_error", patience=5, restore_best_weights=True)  # stop running after 5 epochs no improvement
 callbacks_list = [checkpoint, es]
 train_generator = train_datagen.flow((X_train, X_train_temp), y_train,batch_size=8) # define generator for data augmentation on images, but not on temp
 history = model.fit(train_generator,
