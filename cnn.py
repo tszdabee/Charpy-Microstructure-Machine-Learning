@@ -195,11 +195,18 @@ history = model.fit(train_generator,
                     class_weight=class_weights_dict
                     )
 
+# inverse scale back to nominal values
+y_train = scaler.inverse_transform(y_train.reshape(-1, 1)).reshape(-1,)
+y_val = scaler.inverse_transform(y_val.reshape(-1, 1)).reshape(-1,)
+y_test = scaler.inverse_transform(y_test.reshape(-1, 1)).reshape(-1,)
+
 # train/validation error and loss
+train_mae = [x*scaler.data_range_[0] for x in history.history['mean_absolute_error']] #inverse scale for visualization to nominal values
+val_mae = [x*scaler.data_range_[0] for x in history.history['val_mean_absolute_error']]
 plt.plot(history.history['mean_absolute_error'])
 plt.plot(history.history['val_mean_absolute_error'])
 plt.title('Model Accuracy')
-plt.ylabel('Mean Absolute Error for Training and Validation')
+plt.ylabel('Mean Absolute Error (J) for Training and Validation')
 plt.xlabel('Epoch')
 plt.legend(['training', 'validation'], loc='upper left')
 plt.show()
@@ -226,20 +233,6 @@ model = keras.models.load_model("/Users/tszdabee/Desktop/FYP_Code/Model/test.b0.
 test_loss, test_mae = model.evaluate([X_test, X_test_temp], y_test, verbose=0) #evaluate model
 print("The loss of the model on unseen data is: ", test_loss)
 print('The mean absolute error of the model on unseen data is:', test_mae)
-
-# inverse scale back to nominal values
-y_train = scaler.inverse_transform(y_train.reshape(-1, 1)).reshape(-1,)
-y_val = scaler.inverse_transform(y_val.reshape(-1, 1)).reshape(-1,)
-y_test = scaler.inverse_transform(y_test.reshape(-1, 1)).reshape(-1,)
-#plot MAE during training/validation over epochs
-hist = history.history['val_mean_absolute_error']
-hist = [x*scaler.data_range_[0] for x in hist] #inverse scale mae for visualization
-plt.plot(hist)
-plt.title('Model Training and Validation Mean Abs Error (J)')
-plt.ylabel('Mean Absolute Error', fontsize=12)
-plt.xlabel('Epoch', fontsize=12)
-plt.legend(['mean absolute error'], loc='best', prop={'size': 12})
-plt.show()
 
 
 # plot architecture (Not working very well at the moment, will conduct manually with model summary)
