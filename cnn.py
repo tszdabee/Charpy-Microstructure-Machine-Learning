@@ -78,7 +78,7 @@ train_datagen = ImageDataGenerator(
     # brightness_range=[0.4,1],
     # zoom_range=[5,0.5]
 )
-train_datagen.fit(X_train)
+train_datagen.fit(X_train) #augment training data
 
 #scale fit outputs, inverse scale later to obtain real values. helps converge faster
 scaler = MinMaxScaler()
@@ -178,11 +178,12 @@ checkpoint = keras.callbacks.ModelCheckpoint(filepath, monitor="val_mean_absolut
                                              mode='min')  # Save new model if error decreases
 es = keras.callbacks.EarlyStopping(monitor="val_mean_absolute_percentage_error", patience=5, restore_best_weights=True)  # stop running after 5 epochs no improvement
 callbacks_list = [checkpoint, es]
-history = model.fit(train_datagen.flow(X_train, y_train, batch_size=16),
+train_generator = train_datagen.flow((X_train, X_train_temp), y_train,batch_size=8) # define generator for data augmentation on images, but not on temp
+history = model.fit(train_generator,
                     # 16 image augmentations during each epoch of training
                     epochs=50,
                     batch_size=32,
-                    validation_data=(X_val, y_val),  # from TEST: 80% training, 10% validation, 10% testing
+                    validation_data=([X_val, X_val_temp], y_val),  # from TEST: 80% training, 10% validation, 10% testing
                     callbacks=callbacks_list,  # save callbacks
                     verbose=1)
 
@@ -231,7 +232,7 @@ plt.title('Model Training and Validation Mean Abs Error (J)')
 plt.ylabel('Mean Absolute Error', fontsize=12)
 plt.xlabel('Epoch', fontsize=12)
 plt.legend(['mean absolute error'], loc='best', prop={'size': 12})
-
+plt.show()
 # # Further detailed evaluation for analysis
 #y_pred = scaler.inverse_transform(model.predict(X_test)).reshape(-1,)  # predicts output
 # from sklearn.metrics import classification_report  # Confusion matrix
