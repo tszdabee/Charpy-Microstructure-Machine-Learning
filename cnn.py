@@ -15,6 +15,8 @@ from tensorflow.keras.losses import MeanAbsoluteError, MeanAbsolutePercentageErr
 from tensorflow.keras.preprocessing.image import ImageDataGenerator  # image augmentation
 from sklearn.preprocessing import MinMaxScaler
 
+from sklearn.utils.class_weight import compute_class_weight
+
 # Function to compile all train/test data with outputs into array
 def getdata(folder):
     # Initialize empty arrays for input/output
@@ -165,8 +167,12 @@ model = tf.keras.Model(inputs=[img_input, temp_input], outputs=output)
 
 model.summary()
 
+# Find class weights (to solve data imbalance by giving more weight to minority classes)
+class_weights = compute_class_weight('balanced', np.unique(y_train), y_train)
+class_weights_dict = dict(enumerate(class_weights))
+
 # Compile model
-opt = keras.optimizers.Adam(learning_rate=1e-1)
+opt = keras.optimizers.Adam(learning_rate=1e-3)
 model.compile(loss='mean_absolute_error',
               optimizer="adam",
               metrics=[MeanAbsoluteError(), MeanAbsolutePercentageError()])
@@ -174,7 +180,7 @@ model.compile(loss='mean_absolute_error',
 # Training model
 # checkpoint to save best models
 filepath = "/Users/tszdabee/Desktop/FYP_Code/Model/test.b0.hdf5"
-checkpoint = keras.callbacks.ModelCheckpoint(filepath, monitor="val_mean_absolute_percentage_error", verbose=1, save_best_only=True,
+checkpoint = keras.callbacks.ModelCheckpoint(filepath, monitor="val_mean_error", verbose=1, save_best_only=True,
                                              mode='min')  # Save new model if error decreases
 es = keras.callbacks.EarlyStopping(monitor="val_mean_absolute_percentage_error", patience=5, restore_best_weights=True)  # stop running after 5 epochs no improvement
 callbacks_list = [checkpoint, es]
@@ -185,46 +191,47 @@ history = model.fit(train_generator,
                     batch_size=32,
                     validation_data=([X_val, X_val_temp], y_val),  # from TEST: 80% training, 10% validation, 10% testing
                     callbacks=callbacks_list,  # save callbacks
-                    verbose=1)
+                    verbose=1,
+                    class_weight=class_weights_dict
+                    )
 
-# Summarize Train/Validation Accuracy and Loss over epochs.
-# plt.style.use('ggplot')
-# plt.figure(figsize=(12, 12))
-# plt.subplot(2, 2, 1)
-# plt.plot(history.history['accuracy'])
-# plt.plot(history.history['val_accuracy'])
-# plt.title('Model Training and Validation Accuracy')
-# plt.ylabel('Accuracy', fontsize=12)
-# plt.xlabel('Epoch', fontsize=12)
-# plt.legend(['train accuracy', 'validation accuracy'], loc='lower right', prop={'size': 12})
-#
-# plt.subplot(2, 2, 2)
-# plt.plot(history.history['loss'])
-# plt.plot(history.history['val_loss'])
-# plt.title('Model Training and Validation Loss')
-# plt.ylabel('Loss', fontsize=12)
-# plt.xlabel('Epoch', fontsize=12)
-# plt.legend(['train loss', 'validation loss'], loc='best', prop={'size': 12})
-
-loss = history.history['loss']
-epochs = range(1, len(loss)+1)
-plt.plot(epochs, loss, 'ro', label='Training loss')
-plt.legend()
+# train/validation error and loss
+plt.plot(history.history['mean_absolute_error'])
+plt.plot(history.history['val_mean_absolute_error'])
+plt.title('Model Accuracy')
+plt.ylabel('Mean Absolute Error for Training and Validation')
+plt.xlabel('Epoch')
+plt.legend(['training', 'validation'], loc='upper left')
 plt.show()
 
+plt.plot(history.history['loss'])
+plt.plot(history.history['val_loss'])
+plt.title('Model Loss for Training and Validation')
+plt.ylabel('Loss')
+plt.xlabel('Epoch')
+plt.legend(['training', 'validation'], loc='upper right')
+plt.show()
+
+#original code
+# loss = history.history['loss']
+# epochs = range(1, len(loss)+1)
+# plt.style.use('ggplot')
+# plt.plot(epochs, loss, 'ro', label='Training loss')
+# plt.legend()
+# plt.show()
 
 
 # Basic predict + evaluation with unseen test data
 model = keras.models.load_model("/Users/tszdabee/Desktop/FYP_Code/Model/test.b0.hdf5")
-#test_loss = model.evaluate(X_test, y_test, verbose=1)
-#print("The accuracy of the model is: ", test_acc)
-#print("The loss of the model is: ", test_loss)
+test_loss, test_mae = model.evaluate([X_test, X_test_temp], y_test, verbose=0) #evaluate model
+print("The loss of the model on unseen data is: ", test_loss)
+print('The mean absolute error of the model on unseen data is:', test_mae)
 
-
+# inverse scale back to nominal values
 y_train = scaler.inverse_transform(y_train.reshape(-1, 1)).reshape(-1,)
 y_val = scaler.inverse_transform(y_val.reshape(-1, 1)).reshape(-1,)
 y_test = scaler.inverse_transform(y_test.reshape(-1, 1)).reshape(-1,)
-
+#plot MAE during training/validation over epochs
 hist = history.history['val_mean_absolute_error']
 hist = [x*scaler.data_range_[0] for x in hist] #inverse scale mae for visualization
 plt.plot(hist)
@@ -233,13 +240,6 @@ plt.ylabel('Mean Absolute Error', fontsize=12)
 plt.xlabel('Epoch', fontsize=12)
 plt.legend(['mean absolute error'], loc='best', prop={'size': 12})
 plt.show()
-# # Further detailed evaluation for analysis
-#y_pred = scaler.inverse_transform(model.predict(X_test)).reshape(-1,)  # predicts output
-# from sklearn.metrics import classification_report  # Confusion matrix
-#
-#
-# print(classification_report(y_test, y_pred)) # y_test instead of one hot encoded with original labels.
-
 
 
 # plot architecture (Not working very well at the moment, will conduct manually with model summary)
