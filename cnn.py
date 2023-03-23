@@ -88,10 +88,6 @@ y_train = scaler.fit_transform(y_train.reshape(-1, 1)).reshape(-1,)
 y_val = scaler.transform(y_val.reshape(-1, 1)).reshape(-1,)
 y_test = scaler.transform(y_test.reshape(-1, 1)).reshape(-1,)
 
-# Normalization of image data, resize from 0-255 to 0-1
-# X_train = X_train / 255 #removed, since rescale from Data Augmentation implements this
-# X_test = X_test / 255 # REMOVED rescale, efficientNet has in-built normalization
-
 print("Shape for X_train: ", np.shape(X_train))
 print("Shape for y_train: ", np.shape(y_train))
 
@@ -196,28 +192,29 @@ history = model.fit(train_generator,
                     class_weight=class_weights_dict
                     )
 
-# inverse scale back to nominal values
-y_train = scaler.inverse_transform(y_train.reshape(-1, 1)).reshape(-1,)
-y_val = scaler.inverse_transform(y_val.reshape(-1, 1)).reshape(-1,)
-y_test = scaler.inverse_transform(y_test.reshape(-1, 1)).reshape(-1,)
+mae=12.1456
 
 # train/validation error and loss
-train_mae = [x*scaler.data_range_[0] for x in history.history['mean_absolute_error']] #inverse scale for visualization to nominal values
-val_mae = [x*scaler.data_range_[0] for x in history.history['val_mean_absolute_error']]
-plt.plot(history.history['mean_absolute_error'])
-plt.plot(history.history['val_mean_absolute_error'])
-plt.title('Model Accuracy')
-plt.ylabel('Mean Absolute Error (J) for Training and Validation')
-plt.xlabel('Epoch')
-plt.legend(['training', 'validation'], loc='upper left')
-plt.show()
+fig, axs = plt.subplots(1, 2, figsize=(12, 6))
 
-plt.plot(history.history['loss'])
-plt.plot(history.history['val_loss'])
-plt.title('Model Loss for Training and Validation')
-plt.ylabel('Loss')
-plt.xlabel('Epoch')
-plt.legend(['training', 'validation'], loc='upper right')
+train_mae = [x*scaler.data_range_[0] for x in history.history['mean_absolute_error']] #plot mae
+val_mae = [x*scaler.data_range_[0] for x in history.history['val_mean_absolute_error']]
+axs[0].axhline(y=mae, color="lightcoral", linestyle="dashed")
+axs[0].plot(train_mae)
+axs[0].plot(val_mae)
+axs[0].set_title('Model Accuracy (val_mae=' + str(round(val_mae[-1], 4)) + 'J)')
+axs[0].set_ylabel('Mean Absolute Error (J) for Training and Validation')
+axs[0].set_xlabel('Epoch')
+axs[0].legend(['mae baseline (' + str(mae) + ')', 'training', 'validation'], loc='upper left')
+train_loss = [x*scaler.data_range_[0] for x in history.history['loss']] #plot loss
+val_loss = [x*scaler.data_range_[0] for x in history.history['val_loss']]
+axs[1].axhline(y=mae, color="lightcoral", linestyle="dashed")
+axs[1].plot(train_loss)
+axs[1].plot(val_loss)
+axs[1].set_title('Model Loss for Training and Validation (' + str(round(val_loss[-1], 4)) + 'J)')
+axs[1].set_ylabel('Loss (J)')
+axs[1].set_xlabel('Epoch')
+axs[1].legend(['mae baseline (' + str(mae) + ')', 'training', 'validation'], loc='upper right')
 plt.show()
 
 #original code
@@ -229,11 +226,33 @@ plt.show()
 # plt.show()
 
 
-# Basic predict + evaluation with unseen test data
-model = keras.models.load_model("/Users/tszdabee/Desktop/FYP_Code/Model/test.b0.hdf5")
+# basic predict + evaluation with unseen test data
+model = keras.models.load_model("/Users/tszdabee/Desktop/FYP_Code/Model/test.b0.hdf5", custom_objects={'MeanAbsoluteError': MeanAbsoluteError()})
 test_loss, test_mae = model.evaluate([X_test, X_test_temp], y_test, verbose=0) #evaluate model
-print("The loss of the model on unseen data is: ", test_loss)
-print('The mean absolute error of the model on unseen data is:', test_mae)
+print("The loss of the model on unseen data is: ", test_loss*scaler.data_range_[0]) #inverse transform back to actual
+print('The mean absolute error of the model on unseen data is:', test_mae*scaler.data_range_[0])
+
+
+
+# trained model to predict test data (unseen)
+y_pred = model.predict([X_test, X_test_temp])
+y_test_norm = scaler.inverse_transform(y_test.reshape(-1, 1)).reshape(-1,) #inverse transform test and prediction values for visualization
+y_pred_norm = scaler.inverse_transform(y_pred.reshape(-1, 1)).reshape(-1,)
+plt.scatter(y_test_norm, y_pred_norm) #create scatterplot
+plt.plot([min(y_test_norm), max(y_test_norm)], [min(y_test_norm), max(y_test_norm)], 'r--')
+plt.xlabel('Actual Values')
+plt.ylabel('Predicted Values')
+plt.title('Actual vs Predicted Values')
+plt.show()
+
+
+# inverse scale back to nominal values (not really needed)
+# y_train = scaler.inverse_transform(y_train.reshape(-1, 1)).reshape(-1,)
+# y_val = scaler.inverse_transform(y_val.reshape(-1, 1)).reshape(-1,)
+# y_test = scaler.inverse_transform(y_test.reshape(-1, 1)).reshape(-1,)
+
+
+
 
 
 # plot architecture (Not working very well at the moment, will conduct manually with model summary)
