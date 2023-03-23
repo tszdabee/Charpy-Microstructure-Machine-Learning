@@ -149,8 +149,6 @@ base_model = tf.keras.applications.EfficientNetB0(include_top=False,  # Now acts
                                            weights='imagenet',
                                            # input_tensor=new_input,
                                            pooling='max',
-                                           #classes=5,  # number of output classes
-                                           classifier_activation='softmax',
                                            drop_connect_rate=0.2)  # dropout of 0.5 instead of 0.2 default, prevent overfit
 # Freeze pretrained model layers
 for layer in base_model.layers:
