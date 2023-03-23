@@ -14,7 +14,8 @@ from keras.utils.np_utils import to_categorical  # convert categorical form
 from tensorflow.keras.losses import MeanAbsoluteError, MeanAbsolutePercentageError #losses
 from tensorflow.keras.preprocessing.image import ImageDataGenerator  # image augmentation
 from sklearn.preprocessing import MinMaxScaler
-
+from sklearn.metrics import mean_absolute_error
+from sklearn.linear_model import LinearRegression
 from sklearn.utils.class_weight import compute_class_weight
 
 # Function to compile all train/test data with outputs into array
@@ -55,6 +56,21 @@ def getdata(folder):
                         #print(image_filename, output, temp) # For debugging with filenames and output check
     return np.asarray(X), np.asarray(X_temp), np.asarray(y)
 
+# function to calculate baseline mae
+def calculate_mae_baseline(csv_filename):
+    df = pd.read_csv(csv_filename)
+    X = df[['temp_c']]
+    y = df['impact_energy_j']
+    # linear regression on data
+    lin_reg = LinearRegression()
+    lin_reg.fit(X, y)
+    df['predicted'] = lin_reg.predict(X)
+    # abs diff + mae
+    df['abs_diff'] = abs(df['predicted'] - df['impact_energy_j'])
+    mae = mean_absolute_error(df['impact_energy_j'], df['predicted'])
+    return mae
+
+mae_baseline = calculate_mae_baseline('charpy_results.csv')
 
 # Define filepaths and directories
 main_dir = '/Users/tszdabee/Desktop/FYP_Code/dataset-master/'  # Contains all files used in project
@@ -192,29 +208,27 @@ history = model.fit(train_generator,
                     class_weight=class_weights_dict
                     )
 
-mae=12.1456
-
 # train/validation error and loss
 fig, axs = plt.subplots(1, 2, figsize=(12, 6))
 
 train_mae = [x*scaler.data_range_[0] for x in history.history['mean_absolute_error']] #plot mae
 val_mae = [x*scaler.data_range_[0] for x in history.history['val_mean_absolute_error']]
-axs[0].axhline(y=mae, color="lightcoral", linestyle="dashed")
+axs[0].axhline(y=mae_baseline, color="lightcoral", linestyle="dashed")
 axs[0].plot(train_mae)
 axs[0].plot(val_mae)
 axs[0].set_title('Model Accuracy (val_mae=' + str(round(val_mae[-1], 4)) + 'J)')
 axs[0].set_ylabel('Mean Absolute Error (J) for Training and Validation')
 axs[0].set_xlabel('Epoch')
-axs[0].legend(['mae baseline (' + str(mae) + ')', 'training', 'validation'], loc='upper left')
+axs[0].legend(['mae baseline (' + str(mae_baseline) + ')', 'training', 'validation'], loc='upper left')
 train_loss = [x*scaler.data_range_[0] for x in history.history['loss']] #plot loss
 val_loss = [x*scaler.data_range_[0] for x in history.history['val_loss']]
-axs[1].axhline(y=mae, color="lightcoral", linestyle="dashed")
+axs[1].axhline(y=mae_baseline, color="lightcoral", linestyle="dashed")
 axs[1].plot(train_loss)
 axs[1].plot(val_loss)
 axs[1].set_title('Model Loss for Training and Validation (' + str(round(val_loss[-1], 4)) + 'J)')
 axs[1].set_ylabel('Loss (J)')
 axs[1].set_xlabel('Epoch')
-axs[1].legend(['mae baseline (' + str(mae) + ')', 'training', 'validation'], loc='upper right')
+axs[1].legend(['mae baseline (' + str(mae_baseline) + ')', 'training', 'validation'], loc='upper right')
 plt.show()
 
 #original code
