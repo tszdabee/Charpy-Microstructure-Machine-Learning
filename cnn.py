@@ -147,7 +147,7 @@ plt.show()
 # model.add(BatchNormalization())
 # model.add(Dense(5, activation="softmax")) # Five outputs (including unused base case of index 0 to catch unexpected samples)
 
-# Model 2: EfficientNetB0
+# Model 2: EfficientNetb1
 # convert grayscale to rgb since EfficientNet pretrained on rgb
 X_train = np.asarray([(np.dstack([X_train[i], X_train[i], X_train[i]])) for i in range(len(X_train))])
 X_val = np.asarray([(np.dstack([X_val[i], X_val[i], X_val[i]])) for i in range(len(X_val))])
@@ -156,8 +156,8 @@ X_test = np.asarray([(np.dstack([X_test[i], X_test[i], X_test[i]])) for i in ran
 img_size = len(X_train[0])
 img_input = Input(shape=(img_size, img_size, 3)) #image input shape
 temp_input = Input(shape=(1,), name='temp_input') #define temp input shape
-# Use EfficientNetB0
-base_model = tf.keras.applications.EfficientNetB0(include_top=False,  # Now acts as feature extraction
+# Use EfficientNetb1
+base_model = tf.keras.applications.EfficientNetB1(include_top=False,  # Now acts as feature extraction
                                            weights='imagenet',
                                            # input_tensor=new_input,
                                            pooling='max',
@@ -192,7 +192,7 @@ model.compile(loss='mean_absolute_error',
 
 # Training model
 # checkpoint to save best models
-filepath = "/Users/tszdabee/Desktop/FYP_Code/Model/test.b0.hdf5"
+filepath = "/Users/tszdabee/Desktop/FYP_Code/Model/test.b1.hdf5"
 checkpoint = keras.callbacks.ModelCheckpoint(filepath, monitor="val_mean_absolute_error", verbose=1, save_best_only=True,
                                              mode='min')  # Save new model if error decreases
 es = keras.callbacks.EarlyStopping(monitor="val_mean_absolute_error", patience=5, restore_best_weights=True)  # stop running after 5 epochs no improvement
@@ -216,7 +216,7 @@ val_mae = [x*scaler.data_range_[0] for x in history.history['val_mean_absolute_e
 axs[0].axhline(y=mae_baseline, color="lightcoral", linestyle="dashed")
 axs[0].plot(train_mae)
 axs[0].plot(val_mae)
-axs[0].set_title('Model Accuracy (val_mae=' + str(round(val_mae[-1], 4)) + 'J)')
+axs[0].set_title('Model Mean Absolute Error (val_mae=' + str(round(val_mae[-1], 4)) + 'J)')
 axs[0].set_ylabel('Mean Absolute Error (J) for Training and Validation')
 axs[0].set_xlabel('Epoch')
 axs[0].legend(['mae baseline (' + str(mae_baseline) + ')', 'training', 'validation'], loc='upper left')
@@ -231,32 +231,22 @@ axs[1].set_xlabel('Epoch')
 axs[1].legend(['mae baseline (' + str(mae_baseline) + ')', 'training', 'validation'], loc='upper right')
 plt.show()
 
-#original code
-# loss = history.history['loss']
-# epochs = range(1, len(loss)+1)
-# plt.style.use('ggplot')
-# plt.plot(epochs, loss, 'ro', label='Training loss')
-# plt.legend()
-# plt.show()
-
-
 # basic predict + evaluation with unseen test data
-model = keras.models.load_model("/Users/tszdabee/Desktop/FYP_Code/Model/test.b0.hdf5", custom_objects={'MeanAbsoluteError': MeanAbsoluteError()})
+model = keras.models.load_model("/Users/tszdabee/Desktop/FYP_Code/Model/test.b1.hdf5", custom_objects={'MeanAbsoluteError': MeanAbsoluteError()})
 test_loss, test_mae = model.evaluate([X_test, X_test_temp], y_test, verbose=0) #evaluate model
 print("The loss of the model on unseen data is: ", test_loss*scaler.data_range_[0]) #inverse transform back to actual
 print('The mean absolute error of the model on unseen data is:', test_mae*scaler.data_range_[0])
-
-
 
 # trained model to predict test data (unseen)
 y_pred = model.predict([X_test, X_test_temp])
 y_test_norm = scaler.inverse_transform(y_test.reshape(-1, 1)).reshape(-1,) #inverse transform test and prediction values for visualization
 y_pred_norm = scaler.inverse_transform(y_pred.reshape(-1, 1)).reshape(-1,)
-plt.scatter(y_test_norm, y_pred_norm) #create scatterplot
-plt.plot([min(y_test_norm), max(y_test_norm)], [min(y_test_norm), max(y_test_norm)], 'r--')
-plt.xlabel('Actual Values')
-plt.ylabel('Predicted Values')
-plt.title('Actual vs Predicted Values')
+fig, ax = plt.subplots(figsize=(12, 6))
+ax.scatter(y_test_norm, y_pred_norm) #create scatterplot
+ax.plot([min(y_test_norm), max(y_test_norm)], [min(y_test_norm), max(y_test_norm)], 'r--')
+ax.set_xlabel('Actual Values')
+ax.set_ylabel('Predicted Values')
+ax.set_title('Actual vs Predicted Values')
 plt.show()
 
 
@@ -264,9 +254,6 @@ plt.show()
 # y_train = scaler.inverse_transform(y_train.reshape(-1, 1)).reshape(-1,)
 # y_val = scaler.inverse_transform(y_val.reshape(-1, 1)).reshape(-1,)
 # y_test = scaler.inverse_transform(y_test.reshape(-1, 1)).reshape(-1,)
-
-
-
 
 
 # plot architecture (Not working very well at the moment, will conduct manually with model summary)
