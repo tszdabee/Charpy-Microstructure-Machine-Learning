@@ -9,6 +9,8 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error
 from sklearn.model_selection import KFold
 import matplotlib.pyplot as plt
+from sklearn.model_selection import GridSearchCV # Hyperparameter tuning heatmap
+import seaborn as sns
 
 # Set up the file paths
 main_dir = '/Users/tszdabee/Desktop/FYP_Code/'
@@ -89,3 +91,25 @@ plt.ylabel('Predicted Impact Energy (J)')
 plt.title('Support Vector Regression Model Performance (MAE=' + str(round(svr_mae, 4)) +')')
 plt.show()
 
+
+#svr random tuning
+# Specify hyperparameter search space
+param_grid = {'C': [0.01, 0.1, 1, 10, 100, 1e3, 1e4, 1e5],
+              'gamma': [1e-6, 1e-5, 1e-4, 1e-3, 0.01, 0.1, 1, 10],
+              'epsilon': [0.01, 0.1, 1, 10]}
+
+# Create SVR estimator
+svr = SVR(kernel='linear')
+
+# Perform grid search with cross-validation
+grid_search = GridSearchCV(svr, param_grid, scoring='neg_mean_absolute_error', cv=kf)
+grid_search.fit(X, y)
+# The thing is that GridSearchCV, by convention, always tries to maximize its score so loss functions like MSE have to be negated.The unified scoring API always maximizes the score, so scores which need to be minimized are negated in order for the unified scoring API to work correctly. The score that is returned is therefore negated when it is a score that should be minimized and left positive if it is a score that should be maximized.
+# Convention that higher values are better than lower.
+
+# Extract results into a pandas DataFrame
+results = pd.DataFrame(grid_search.cv_results_)
+
+# Create heatmap of mean test score by hyperparameters
+sns.heatmap(pd.pivot_table(results, values='mean_test_score', index='param_C', columns='param_gamma'), annot=True, cmap='coolwarm')
+plt.title("Negative Mean Abs Test Score")
