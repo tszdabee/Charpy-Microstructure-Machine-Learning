@@ -113,3 +113,31 @@ results = pd.DataFrame(grid_search.cv_results_)
 # Create heatmap of mean test score by hyperparameters
 sns.heatmap(pd.pivot_table(results, values='mean_test_score', index='param_C', columns='param_gamma'), annot=True, cmap='coolwarm')
 plt.title("Negative Mean Abs Test Score")
+
+
+#random forest hyperparam tuning
+# Define hyperparameter ranges to search
+param_grid = {
+    'n_estimators': [64, 128, 256, 516],
+    'max_depth': [2, 8, 16, 32]
+}
+
+# Create the random forest model
+rf_model = RandomForestRegressor(random_state=42)
+
+# Perform a grid search to find the best hyperparameters
+grid_search = GridSearchCV(rf_model, param_grid, cv=kf, scoring='neg_mean_absolute_error')
+grid_search.fit(X, y)
+
+# Print the best hyperparameters
+print("Best Random Forest Hyperparameters:", grid_search.best_params_)
+
+# Create a heatmap of the mean test scores for each combination of hyperparameters
+scores = grid_search.cv_results_['mean_test_score'].reshape(len(param_grid['n_estimators']), len(param_grid['max_depth']))
+plt.imshow(scores, cmap='hot', interpolation='nearest')
+plt.xticks(range(len(param_grid['max_depth'])), param_grid['max_depth'])
+plt.yticks(range(len(param_grid['n_estimators'])), param_grid['n_estimators'])
+plt.xlabel('Max Depth')
+plt.ylabel('Number of Estimators')
+plt.colorbar()
+plt.show()
