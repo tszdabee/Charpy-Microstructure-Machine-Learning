@@ -6,9 +6,9 @@ from skimage.transform import resize
 from skimage.feature import hog
 from sklearn.svm import SVR
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error
 from sklearn.model_selection import KFold
+import matplotlib.pyplot as plt
 
 # Set up the file paths
 main_dir = '/Users/tszdabee/Desktop/FYP_Code/'
@@ -71,3 +71,21 @@ for train_index, test_index in kf.split(X):
 
 print("SVR MAE Scores:", svr_mae_scores)
 print("SVR Mean MAE:", np.mean(svr_mae_scores))
+
+
+# Visualize the predicted vs actual values
+plt.scatter(y_test, rf_y_pred, alpha=0.5)
+plt.plot(np.linspace(0, 400, 100), np.linspace(0, 400, 100), 'r--')
+plt.xlabel('Actual Impact Energy (J)')
+plt.ylabel('Predicted Impact Energy (J)')
+plt.title('Random Forest Regression Model Performance (MAE=' + str(round(rf_mae, 4)) +')')
+plt.show()
+
+# Visualize the predicted vs actual values SVR
+plt.scatter(y_test, svr_y_pred, alpha=0.5)
+plt.plot(np.linspace(0, 400, 100), np.linspace(0, 400, 100), 'r--')
+plt.xlabel('Actual Impact Energy (J)')
+plt.ylabel('Predicted Impact Energy (J)')
+plt.title('Support Vector Regression Model Performance (MAE=' + str(round(svr_mae, 4)) +')')
+plt.show()
+
