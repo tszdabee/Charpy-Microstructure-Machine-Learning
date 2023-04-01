@@ -132,22 +132,23 @@ plt.show()
 # # Model 1: Basic CNN
 # # three convolutional layers, three max-pooling layers, and two fully connected dense layers. use of batch normalization and dropout layers helps prevent overfitting and improve the generalization performance of the model.
 # model = Sequential()
-# model.add(Conv2D(64, 3, padding="same", activation="relu", input_shape=X_train.shape[1:]))
+# model.add(Conv2D(32, 3, padding="same", activation="relu", input_shape=X_train.shape[1:]))
+# model.add(MaxPool2D())
+#
+# model.add(Conv2D(32, 3, padding="same", activation="relu"))
 # model.add(MaxPool2D())
 #
 # model.add(Conv2D(64, 3, padding="same", activation="relu"))
 # model.add(MaxPool2D())
 #
-# model.add(Conv2D(128, 3, padding="same", activation="relu"))
-# model.add(MaxPool2D())
-#
 # model.add(Flatten())
-# model.add(Dense(256, activation="relu"))
-# model.add(Dropout(0.5)) # Dropout to prevent overfitting
+# model.add(Dense(64, activation="relu"))
+# model.add(Dropout(0.5))
 # model.add(BatchNormalization())
-# model.add(Dense(5, activation="softmax")) # Five outputs (including unused base case of index 0 to catch unexpected samples)
+# model.add(Dense(1, activation="linear")) # Output layer with linear activation since it's a regression problem
 
-# Model 2: EfficientNetb1
+
+# Model 2: EfficientNetb0
 # convert grayscale to rgb since EfficientNet pretrained on rgb
 X_train = np.asarray([(np.dstack([X_train[i], X_train[i], X_train[i]])) for i in range(len(X_train))])
 X_val = np.asarray([(np.dstack([X_val[i], X_val[i], X_val[i]])) for i in range(len(X_val))])
@@ -156,8 +157,8 @@ X_test = np.asarray([(np.dstack([X_test[i], X_test[i], X_test[i]])) for i in ran
 img_size = len(X_train[0])
 img_input = Input(shape=(img_size, img_size, 3)) #image input shape
 temp_input = Input(shape=(1,), name='temp_input') #define temp input shape
-# Use EfficientNetb1
-base_model = tf.keras.applications.EfficientNetB1(include_top=False,  # Now acts as feature extraction
+# Use EfficientNetb0
+base_model = tf.keras.applications.EfficientNetB0(include_top=False,  # Now acts as feature extraction
                                            weights='imagenet',
                                            # input_tensor=new_input,
                                            pooling='max',
@@ -192,14 +193,13 @@ model.compile(loss='mean_absolute_error',
 
 # Training model
 # checkpoint to save best models
-filepath = "/Users/tszdabee/Desktop/FYP_Code/Model/test.b1.hdf5"
+filepath = "/Users/tszdabee/Desktop/FYP_Code/Model/test.b0.hdf5"
 checkpoint = keras.callbacks.ModelCheckpoint(filepath, monitor="val_mean_absolute_error", verbose=1, save_best_only=True,
                                              mode='min')  # Save new model if error decreases
-es = keras.callbacks.EarlyStopping(monitor="val_mean_absolute_error", patience=5, restore_best_weights=True)  # stop running after 5 epochs no improvement
+es = keras.callbacks.EarlyStopping(monitor="val_mean_absolute_error", patience=10, restore_best_weights=True)  # stop running after 5 epochs no improvement
 callbacks_list = [checkpoint, es]
 train_generator = train_datagen.flow((X_train, X_train_temp), y_train,batch_size=8) # define generator for data augmentation on images, but not on temp
 history = model.fit(train_generator,
-                    # 16 image augmentations during each epoch of training
                     epochs=50,
                     batch_size=32,
                     validation_data=([X_val, X_val_temp], y_val),  # from TEST: 80% training, 10% validation, 10% testing
@@ -208,31 +208,34 @@ history = model.fit(train_generator,
                     class_weight=class_weights_dict
                     )
 
-# train/validation error and loss
-fig, axs = plt.subplots(1, 2, figsize=(12, 6))
+def plot_hist(history):
+    # train/validation error and loss
+    fig, axs = plt.subplots(1, 2, figsize=(12, 6))
 
-train_mae = [x*scaler.data_range_[0] for x in history.history['mean_absolute_error']] #plot mae
-val_mae = [x*scaler.data_range_[0] for x in history.history['val_mean_absolute_error']]
-axs[0].axhline(y=mae_baseline, color="lightcoral", linestyle="dashed")
-axs[0].plot(train_mae)
-axs[0].plot(val_mae)
-axs[0].set_title('Model Mean Absolute Error (val_mae=' + str(round(val_mae[-1], 4)) + 'J)')
-axs[0].set_ylabel('Mean Absolute Error (J) for Training and Validation')
-axs[0].set_xlabel('Epoch')
-axs[0].legend(['mae baseline (' + str(mae_baseline) + ')', 'training', 'validation'], loc='upper left')
-train_loss = [x*scaler.data_range_[0] for x in history.history['loss']] #plot loss
-val_loss = [x*scaler.data_range_[0] for x in history.history['val_loss']]
-axs[1].axhline(y=mae_baseline, color="lightcoral", linestyle="dashed")
-axs[1].plot(train_loss)
-axs[1].plot(val_loss)
-axs[1].set_title('Model Loss for Training and Validation (' + str(round(val_loss[-1], 4)) + 'J)')
-axs[1].set_ylabel('Loss (J)')
-axs[1].set_xlabel('Epoch')
-axs[1].legend(['mae baseline (' + str(mae_baseline) + ')', 'training', 'validation'], loc='upper right')
-plt.show()
+    train_mae = [x*scaler.data_range_[0] for x in history.history['mean_absolute_error']] #plot mae
+    val_mae = [x*scaler.data_range_[0] for x in history.history['val_mean_absolute_error']]
+    axs[0].axhline(y=mae_baseline, color="lightcoral", linestyle="dashed")
+    axs[0].plot(train_mae)
+    axs[0].plot(val_mae)
+    axs[0].set_title('Model Mean Absolute Error (val_mae=' + str(round(val_mae[-1], 4)) + 'J)')
+    axs[0].set_ylabel('Mean Absolute Error (J) for Training and Validation')
+    axs[0].set_xlabel('Epoch')
+    axs[0].legend(['mae baseline (' + str(mae_baseline) + ')', 'training', 'validation'], loc='upper left')
+    train_loss = [x*scaler.data_range_[0] for x in history.history['loss']] #plot loss
+    val_loss = [x*scaler.data_range_[0] for x in history.history['val_loss']]
+    axs[1].axhline(y=mae_baseline, color="lightcoral", linestyle="dashed")
+    axs[1].plot(train_loss)
+    axs[1].plot(val_loss)
+    axs[1].set_title('Model Loss for Training and Validation (' + str(round(val_loss[-1], 4)) + 'J)')
+    axs[1].set_ylabel('Loss (J)')
+    axs[1].set_xlabel('Epoch')
+    axs[1].legend(['mae baseline (' + str(mae_baseline) + ')', 'training', 'validation'], loc='upper right')
+    plt.show()
+plot_hist(history)
 
 # basic predict + evaluation with unseen test data
-model = keras.models.load_model("/Users/tszdabee/Desktop/FYP_Code/Model/test.b1.hdf5", custom_objects={'MeanAbsoluteError': MeanAbsoluteError()})
+model = keras.models.load_model("/Users/tszdabee/Desktop/FYP_Code/Model/test.b0.hdf5", custom_objects={'MeanAbsoluteError': MeanAbsoluteError()})
+
 test_loss, test_mae = model.evaluate([X_test, X_test_temp], y_test, verbose=0) #evaluate model
 print("The loss of the model on unseen data is: ", test_loss*scaler.data_range_[0]) #inverse transform back to actual
 print('The mean absolute error of the model on unseen data is:', test_mae*scaler.data_range_[0])
@@ -246,7 +249,7 @@ ax.scatter(y_test_norm, y_pred_norm) #create scatterplot
 ax.plot([min(y_test_norm), max(y_test_norm)], [min(y_test_norm), max(y_test_norm)], 'r--')
 ax.set_xlabel('Actual Values')
 ax.set_ylabel('Predicted Values')
-ax.set_title('Actual vs Predicted Values')
+ax.set_title('Actual vs Predicted Values (MAE=' + str(round(test_mae*scaler.data_range_[0], 4)) + ')')
 plt.show()
 
 
@@ -261,3 +264,28 @@ plt.show()
 # visualkeras.layered_view(model, legend=True).show() # display using your system viewer
 # visualkeras.layered_view(model, legend=True, to_file='output.png') # write to disk
 # visualkeras.layered_view(model, legend=True, to_file='output.png').show() # write and show
+
+def unfreeze_model(model):
+    # We unfreeze the top 20 layers while leaving BatchNorm layers frozen
+    for layer in model.layers[-20:]:
+        if not isinstance(layer, BatchNormalization):
+            layer.trainable = True
+    optimizer = tf.keras.optimizers.Adam(learning_rate=1e-4)
+    model.compile(loss='mean_absolute_error',
+              optimizer="adam",
+              metrics=[MeanAbsoluteError()])
+
+unfreeze_model(model)
+checkpoint = keras.callbacks.ModelCheckpoint(filepath, monitor="val_mean_absolute_error", verbose=1, save_best_only=True,
+                                             mode='min')  # Save new model if error decreases
+es = keras.callbacks.EarlyStopping(monitor="val_mean_absolute_error", patience=10, restore_best_weights=True)  # stop running after 5 epochs no improvement
+callbacks_list = [checkpoint, es]
+hist = model.fit(train_generator,
+                    epochs=30,
+                    batch_size=32,
+                    validation_data=([X_val, X_val_temp], y_val),  # from TEST: 80% training, 10% validation, 10% testing
+                    callbacks=callbacks_list,  # save callbacks
+                    verbose=1,
+                    class_weight=class_weights_dict
+                    )
+plot_hist(hist)
