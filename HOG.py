@@ -11,6 +11,7 @@ from sklearn.model_selection import KFold
 import matplotlib.pyplot as plt
 from sklearn.model_selection import GridSearchCV # Hyperparameter tuning heatmap
 import seaborn as sns
+import glob
 
 # Set up the file paths
 main_dir = '/Users/tszdabee/Desktop/FYP_Code/'
@@ -26,17 +27,18 @@ y=[]
 for sample_dir in sample_dirs:
     sample_name = os.path.basename(sample_dir)
     sample_rows = df.loc[df['sample_name'] == sample_name]
-    temps.append(sample_rows['temp_c'].values)
-    y.append(sample_rows['impact_energy_j'].values)
-    for i in range(56):
-        img_path = os.path.join(sample_dir, f'image{i:04}.tif')
+    sample_temps = sample_rows['temp_c'].values
+    sample_energies = sample_rows['impact_energy_j'].values
+    for img_path in glob.glob(os.path.join(sample_dir, '*.jpeg')):
         sample_img = imread(img_path, as_gray=True)
-        sample_img_resized = resize(sample_img, (256, 128)) # Resize to smaller dimensions
+        sample_img_resized = resize(sample_img, (256, 256))  # Resize to smaller dimensions
         sample_features = hog(sample_img_resized, orientations=9, pixels_per_cell=(8, 8), cells_per_block=(2, 2))
         X_img.append(sample_features)
+        temps.append(sample_temps)
+        y.append(sample_energies)
 X_img = np.array(X_img)
-temps = np.repeat(np.concatenate(temps), 56)
-y =  np.repeat(np.concatenate(y), 56)
+temps = np.concatenate(temps)
+y = np.concatenate(y)
 
 # Combine the image data and temperature data
 X = np.hstack((X_img, temps.reshape(-1, 1)))
