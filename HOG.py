@@ -41,17 +41,78 @@ y =  np.repeat(np.concatenate(y), 56)
 # Combine the image data and temperature data
 X = np.hstack((X_img, temps.reshape(-1, 1)))
 
-# Define the number of splits for cross-validation
+# Define the number of splits for cross-validation (Used for both tuning and final code)
 n_splits = 5
 kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
 
 
+#svr random tuning
+# Specify hyperparameter search space
+param_grid = {'C': [0.01, 0.1, 1, 10, 100],
+              'gamma': [1e-3, 0.01, 0.1, 1, 10],
+              'epsilon': [0.01, 0.1, 1, 10]}
+
+# Create SVR estimator
+svr = SVR(kernel='linear')
+
+# Perform grid search with cross-validation
+svr_grid_search = GridSearchCV(svr, param_grid, scoring='neg_mean_absolute_error', cv=kf)
+svr_grid_search.fit(X, y)
+# The thing is that GridSearchCV, by convention, always tries to maximize its score so loss functions like MSE have to be negated.The unified scoring API always maximizes the score, so scores which need to be minimized are negated in order for the unified scoring API to work correctly. The score that is returned is therefore negated when it is a score that should be minimized and left positive if it is a score that should be maximized.
+# Convention that higher values are better than lower.
+
+# Print the best hyperparameters
+print("Best SVR Hyperparameters:", svr_grid_search.best_params_)
+
+# Extract results into a pandas DataFrame
+results = pd.DataFrame(svr_grid_search.cv_results_)
+
+# Create heatmap of mean test score by hyperparameters
+scores_svr = svr_grid_search.cv_results_['mean_test_score'].reshape(len(param_grid['C']), len(param_grid['gamma']), len(param_grid['epsilon']))
+scores_svr_mean = np.mean(scores_svr, axis=2) # Taking the mean across epsilon values for heatmap visualization
+sns.heatmap(pd.DataFrame(scores_svr_mean, index=param_grid['C'], columns=param_grid['gamma']), annot=True, cmap='coolwarm', cbar_kws={'label': 'Negative Mean Absolute Test Score'})
+plt.title("Support Vector Regression (SVR) Hyperparameter Tuning")
+plt.ylabel('C')
+plt.xlabel('Gamma')
+plt.show()
+
+
+#random forest hyperparam tuning
+# Define hyperparameter ranges to search
+param_grid = {
+    'n_estimators': [32, 64, 128, 256, 516],
+    'max_depth': [2, 4, 8, 16, 32]
+}
+
+# Create the random forest model
+rf_model = RandomForestRegressor(random_state=42)
+
+# Perform a grid search to find the best hyperparameters
+rf_grid_search = GridSearchCV(rf_model, param_grid, cv=kf, scoring='neg_mean_absolute_error')
+rf_grid_search.fit(X, y)
+
+# Print the best hyperparameters
+print("Best Random Forest Hyperparameters:", rf_grid_search.best_params_)
+
+# Create a heatmap of the mean test scores for each combination of hyperparameters
+scores = rf_grid_search.cv_results_['mean_test_score'].reshape(len(param_grid['n_estimators']), len(param_grid['max_depth']))
+plt.imshow(scores, cmap='hot', interpolation='nearest')
+plt.yticks(range(len(param_grid['max_depth'])), param_grid['max_depth'])
+plt.xticks(range(len(param_grid['n_estimators'])), param_grid['n_estimators'])
+plt.ylabel('Max Depth')
+plt.xlabel('Number of Estimators')
+plt.title("Random Forest Hyperparameter Tuning")
+plt.colorbar().set_label('Negative Mean Absolute Test Score')
+plt.show()
+
+
+# USE OPTIMIZED HYPERPARAMETERS TO CONDUCT K FOLD CROSS VALIDATION
 # Train and evaluate the random forest model using cross-validation
 rf_mae_scores = []
 for train_index, test_index in kf.split(X):
     X_train, X_test = X[train_index], X[test_index]
     y_train, y_test = y[train_index], y[test_index]
-    rf_model = RandomForestRegressor(n_estimators=100, max_depth=10, random_state=42)
+    rf_model = RandomForestRegressor(n_estimators=rf_grid_search.best_params_['n_estimators'], max_depth=rf_grid_search.best_params_['max_depth'], random_state=42)
     rf_model.fit(X_train, y_train)
     rf_y_pred = rf_model.predict(X_test)
     rf_mae = mean_absolute_error(y_test, rf_y_pred)
@@ -65,7 +126,7 @@ svr_mae_scores = []
 for train_index, test_index in kf.split(X):
     X_train, X_test = X[train_index], X[test_index]
     y_train, y_test = y[train_index], y[test_index]
-    svr_model = SVR(kernel='linear', C=100, gamma=0.1, epsilon=.1) #RBF leads to poor prediction of errors = 118 MAE
+    svr_model = SVR(kernel='linear', C=svr_grid_search.best_params_['C'], gamma=svr_grid_search.best_params_['gamma'], epsilon=svr_grid_search.best_params_['epsilon']) #RBF leads to poor prediction of errors = 118 MAE
     svr_model.fit(X_train, y_train)
     svr_y_pred = svr_model.predict(X_test)
     svr_mae = mean_absolute_error(y_test, svr_y_pred)
@@ -80,7 +141,7 @@ plt.scatter(y_test, rf_y_pred, alpha=0.5)
 plt.plot(np.linspace(0, 400, 100), np.linspace(0, 400, 100), 'r--')
 plt.xlabel('Actual Impact Energy (J)')
 plt.ylabel('Predicted Impact Energy (J)')
-plt.title('Random Forest Regression Model Performance (MAE=' + str(round(rf_mae, 4)) +')')
+plt.title('Random Forest Regression Model Performance (MAE=' + str(round(np.mean(rf_mae_scores), 4)) +')')
 plt.show()
 
 # Visualize the predicted vs actual values SVR
@@ -88,56 +149,5 @@ plt.scatter(y_test, svr_y_pred, alpha=0.5)
 plt.plot(np.linspace(0, 400, 100), np.linspace(0, 400, 100), 'r--')
 plt.xlabel('Actual Impact Energy (J)')
 plt.ylabel('Predicted Impact Energy (J)')
-plt.title('Support Vector Regression Model Performance (MAE=' + str(round(svr_mae, 4)) +')')
-plt.show()
-
-
-#svr random tuning
-# Specify hyperparameter search space
-param_grid = {'C': [0.01, 0.1, 1, 10, 100, 1e3, 1e4, 1e5],
-              'gamma': [1e-6, 1e-5, 1e-4, 1e-3, 0.01, 0.1, 1, 10],
-              'epsilon': [0.01, 0.1, 1, 10]}
-
-# Create SVR estimator
-svr = SVR(kernel='linear')
-
-# Perform grid search with cross-validation
-grid_search = GridSearchCV(svr, param_grid, scoring='neg_mean_absolute_error', cv=kf)
-grid_search.fit(X, y)
-# The thing is that GridSearchCV, by convention, always tries to maximize its score so loss functions like MSE have to be negated.The unified scoring API always maximizes the score, so scores which need to be minimized are negated in order for the unified scoring API to work correctly. The score that is returned is therefore negated when it is a score that should be minimized and left positive if it is a score that should be maximized.
-# Convention that higher values are better than lower.
-
-# Extract results into a pandas DataFrame
-results = pd.DataFrame(grid_search.cv_results_)
-
-# Create heatmap of mean test score by hyperparameters
-sns.heatmap(pd.pivot_table(results, values='mean_test_score', index='param_C', columns='param_gamma'), annot=True, cmap='coolwarm')
-plt.title("Negative Mean Abs Test Score")
-
-
-#random forest hyperparam tuning
-# Define hyperparameter ranges to search
-param_grid = {
-    'n_estimators': [64, 128, 256, 516],
-    'max_depth': [2, 8, 16, 32]
-}
-
-# Create the random forest model
-rf_model = RandomForestRegressor(random_state=42)
-
-# Perform a grid search to find the best hyperparameters
-grid_search = GridSearchCV(rf_model, param_grid, cv=kf, scoring='neg_mean_absolute_error')
-grid_search.fit(X, y)
-
-# Print the best hyperparameters
-print("Best Random Forest Hyperparameters:", grid_search.best_params_)
-
-# Create a heatmap of the mean test scores for each combination of hyperparameters
-scores = grid_search.cv_results_['mean_test_score'].reshape(len(param_grid['n_estimators']), len(param_grid['max_depth']))
-plt.imshow(scores, cmap='hot', interpolation='nearest')
-plt.xticks(range(len(param_grid['max_depth'])), param_grid['max_depth'])
-plt.yticks(range(len(param_grid['n_estimators'])), param_grid['n_estimators'])
-plt.xlabel('Max Depth')
-plt.ylabel('Number of Estimators')
-plt.colorbar()
+plt.title('Support Vector Regression Model Performance (MAE=' + str(round(np.mean(svr_mae_scores), 4)) +')')
 plt.show()
