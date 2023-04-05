@@ -14,7 +14,7 @@ import seaborn as sns
 
 # Set up the file paths
 main_dir = '/Users/tszdabee/Desktop/FYP_Code/'
-sample_dirs = [os.path.join(main_dir, 'dataset-raw', f'Sample{i:02}') for i in range(1, 13)]
+sample_dirs = [os.path.join(main_dir, 'dataset-HOG', f'Sample{i:02}') for i in range(1, 13)]
 
 # Load the dataset
 df = pd.read_csv(os.path.join(main_dir, 'charpy_results.csv'))
