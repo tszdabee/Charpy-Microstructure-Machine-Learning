@@ -58,7 +58,7 @@ param_grid = {'C': [0.01, 0.1, 1, 10, 100],
 svr = SVR(kernel='linear')
 
 # Perform grid search with cross-validation
-svr_grid_search = GridSearchCV(svr, param_grid, scoring='neg_mean_absolute_error', cv=kf)
+svr_grid_search = GridSearchCV(svr, param_grid, scoring='neg_mean_absolute_error', cv=kf, verbose=3)
 svr_grid_search.fit(X, y)
 # The thing is that GridSearchCV, by convention, always tries to maximize its score so loss functions like MSE have to be negated.The unified scoring API always maximizes the score, so scores which need to be minimized are negated in order for the unified scoring API to work correctly. The score that is returned is therefore negated when it is a score that should be minimized and left positive if it is a score that should be maximized.
 # Convention that higher values are better than lower.
@@ -90,7 +90,7 @@ param_grid = {
 rf_model = RandomForestRegressor(random_state=42)
 
 # Perform a grid search to find the best hyperparameters
-rf_grid_search = GridSearchCV(rf_model, param_grid, cv=kf, scoring='neg_mean_absolute_error')
+rf_grid_search = GridSearchCV(rf_model, param_grid, cv=kf, scoring='neg_mean_absolute_error', verbose=3)
 rf_grid_search.fit(X, y)
 
 # Print the best hyperparameters
