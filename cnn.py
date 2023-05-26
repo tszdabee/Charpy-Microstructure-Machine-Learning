@@ -129,25 +129,6 @@ axl2.set_xlabel('Sample #')
 
 plt.show()
 
-# # Model 1: Basic CNN
-# # three convolutional layers, three max-pooling layers, and two fully connected dense layers. use of batch normalization and dropout layers helps prevent overfitting and improve the generalization performance of the model.
-# model = Sequential()
-# model.add(Conv2D(32, 3, padding="same", activation="relu", input_shape=X_train.shape[1:]))
-# model.add(MaxPool2D())
-#
-# model.add(Conv2D(32, 3, padding="same", activation="relu"))
-# model.add(MaxPool2D())
-#
-# model.add(Conv2D(64, 3, padding="same", activation="relu"))
-# model.add(MaxPool2D())
-#
-# model.add(Flatten())
-# model.add(Dense(64, activation="relu"))
-# model.add(Dropout(0.5))
-# model.add(BatchNormalization())
-# model.add(Dense(1, activation="linear")) # Output layer with linear activation since it's a regression problem
-
-
 # Model 2: EfficientNetb0
 # convert grayscale to rgb since EfficientNet pretrained on rgb
 X_train = np.asarray([(np.dstack([X_train[i], X_train[i], X_train[i]])) for i in range(len(X_train))])
@@ -168,12 +149,17 @@ for layer in base_model.layers:
     layer.trainable = False
 # Define model (image branch)
 x = base_model(img_input) # image branch
-x = Flatten()(x)
 x = BatchNormalization()(x)
 x = Dropout(rate=0.45)(x)
+x = Flatten()(x)
 temp_input = Input(shape=(1,)) #temperature branch
-t = Dense(16, activation='relu')(temp_input)
+t = BatchNormalization()(temp_input)
+#t = Dense(32, activation='relu')(temp_input)
 x = Concatenate()([x, t]) #concatenate temp feature at end of EffNet feature extraction
+
+# Add fully connected layers
+x = Dense(64, activation='relu')(x)
+x = Dense(32, activation='relu')(x)
 
 output = Dense(1)(x)
 
@@ -196,11 +182,11 @@ model.compile(loss='mean_absolute_error',
 filepath = "/Users/tszdabee/Desktop/FYP_Code/Model/test.b0.hdf5"
 checkpoint = keras.callbacks.ModelCheckpoint(filepath, monitor="val_mean_absolute_error", verbose=1, save_best_only=True,
                                              mode='min')  # Save new model if error decreases
-es = keras.callbacks.EarlyStopping(monitor="val_mean_absolute_error", patience=10, restore_best_weights=True)  # stop running after 5 epochs no improvement
+es = keras.callbacks.EarlyStopping(monitor="val_mean_absolute_error", patience=20, restore_best_weights=True)  # stop running after 5 epochs no improvement
 callbacks_list = [checkpoint, es]
 train_generator = train_datagen.flow((X_train, X_train_temp), y_train,batch_size=8) # define generator for data augmentation on images, but not on temp
 history = model.fit(train_generator,
-                    epochs=50,
+                    epochs=100,
                     batch_size=32,
                     validation_data=([X_val, X_val_temp], y_val),  # from TEST: 80% training, 10% validation, 10% testing
                     callbacks=callbacks_list,  # save callbacks
@@ -217,7 +203,7 @@ def plot_hist(history):
     axs[0].axhline(y=mae_baseline, color="lightcoral", linestyle="dashed")
     axs[0].plot(train_mae)
     axs[0].plot(val_mae)
-    axs[0].set_title('Model Mean Absolute Error (val_mae=' + str(round(val_mae[-1], 4)) + 'J)')
+    axs[0].set_title('Model Mean Absolute Error (' + str(round(np.min(val_mae), 4)) + 'J)')
     axs[0].set_ylabel('Mean Absolute Error (J) for Training and Validation')
     axs[0].set_xlabel('Epoch')
     axs[0].legend(['mae baseline (' + str(mae_baseline) + ')', 'training', 'validation'], loc='upper left')
@@ -226,12 +212,13 @@ def plot_hist(history):
     axs[1].axhline(y=mae_baseline, color="lightcoral", linestyle="dashed")
     axs[1].plot(train_loss)
     axs[1].plot(val_loss)
-    axs[1].set_title('Model Loss for Training and Validation (' + str(round(val_loss[-1], 4)) + 'J)')
+    axs[1].set_title('Model Loss for Training and Validation (' + str(round(np.min(val_loss), 4)) + 'J)')
     axs[1].set_ylabel('Loss (J)')
     axs[1].set_xlabel('Epoch')
     axs[1].legend(['mae baseline (' + str(mae_baseline) + ')', 'training', 'validation'], loc='upper right')
     plt.show()
 plot_hist(history)
+
 
 # basic predict + evaluation with unseen test data
 model = keras.models.load_model("/Users/tszdabee/Desktop/FYP_Code/Model/test.b0.hdf5", custom_objects={'MeanAbsoluteError': MeanAbsoluteError()})
@@ -245,7 +232,7 @@ y_pred = model.predict([X_test, X_test_temp])
 y_test_norm = scaler.inverse_transform(y_test.reshape(-1, 1)).reshape(-1,) #inverse transform test and prediction values for visualization
 y_pred_norm = scaler.inverse_transform(y_pred.reshape(-1, 1)).reshape(-1,)
 fig, ax = plt.subplots(figsize=(12, 6))
-ax.scatter(y_test_norm, y_pred_norm) #create scatterplot
+ax.scatter(y_test_norm, y_pred_norm, s=7) #create scatterplot
 ax.plot([min(y_test_norm), max(y_test_norm)], [min(y_test_norm), max(y_test_norm)], 'r--')
 ax.set_xlabel('Actual Values')
 ax.set_ylabel('Predicted Values')
@@ -264,28 +251,30 @@ plt.show()
 # visualkeras.layered_view(model, legend=True).show() # display using your system viewer
 # visualkeras.layered_view(model, legend=True, to_file='output.png') # write to disk
 # visualkeras.layered_view(model, legend=True, to_file='output.png').show() # write and show
+#
 
-def unfreeze_model(model):
-    # We unfreeze the top 20 layers while leaving BatchNorm layers frozen
-    for layer in model.layers[-20:]:
-        if not isinstance(layer, BatchNormalization):
-            layer.trainable = True
-    optimizer = tf.keras.optimizers.Adam(learning_rate=1e-4)
-    model.compile(loss='mean_absolute_error',
-              optimizer="adam",
-              metrics=[MeanAbsoluteError()])
-
-unfreeze_model(model)
-checkpoint = keras.callbacks.ModelCheckpoint(filepath, monitor="val_mean_absolute_error", verbose=1, save_best_only=True,
-                                             mode='min')  # Save new model if error decreases
-es = keras.callbacks.EarlyStopping(monitor="val_mean_absolute_error", patience=10, restore_best_weights=True)  # stop running after 5 epochs no improvement
-callbacks_list = [checkpoint, es]
-hist = model.fit(train_generator,
-                    epochs=30,
-                    batch_size=32,
-                    validation_data=([X_val, X_val_temp], y_val),  # from TEST: 80% training, 10% validation, 10% testing
-                    callbacks=callbacks_list,  # save callbacks
-                    verbose=1,
-                    class_weight=class_weights_dict
-                    )
-plot_hist(hist)
+# UNFREEZE LAYERS TO FINE TUNE
+# def unfreeze_model(model):
+#     # We unfreeze the top 20 layers while leaving BatchNorm layers frozen
+#     for layer in model.layers[-20:]:
+#         if not isinstance(layer, BatchNormalization):
+#             layer.trainable = True
+#     optimizer = tf.keras.optimizers.Adam(learning_rate=1e-4)
+#     model.compile(loss='mean_absolute_error',
+#               optimizer="adam",
+#               metrics=[MeanAbsoluteError()])
+#
+# unfreeze_model(model)
+# checkpoint = keras.callbacks.ModelCheckpoint(filepath, monitor="val_mean_absolute_error", verbose=1, save_best_only=True,
+#                                              mode='min')  # Save new model if error decreases
+# es = keras.callbacks.EarlyStopping(monitor="val_mean_absolute_error", patience=10, restore_best_weights=True)  # stop running after 5 epochs no improvement
+# callbacks_list = [checkpoint, es]
+# hist = model.fit(train_generator,
+#                     epochs=30,
+#                     batch_size=32,
+#                     validation_data=([X_val, X_val_temp], y_val),  # from TEST: 80% training, 10% validation, 10% testing
+#                     callbacks=callbacks_list,  # save callbacks
+#                     verbose=1,
+#                     class_weight=class_weights_dict
+#                     )
+# plot_hist(hist)
