@@ -15,49 +15,49 @@ import glob
 
 # Set up the file paths
 main_dir = '/Users/tszdabee/Desktop/FYP_Code/'
-sample_dirs = [os.path.join(main_dir, 'dataset-HOG', f'Sample{i:02}') for i in range(1, 13)]
+sample_dirs = [os.path.join(main_dir, 'dataset-raw', f'Sample{i:02}') for i in range(1, 13)]
 
 # Load the dataset
 df = pd.read_csv(os.path.join(main_dir, 'charpy_results.csv'))
 
-# Preprocess the image data (UNSLICED RAW)
-# X_img = []
-# temps = []
-# y=[]
-# for sample_dir in sample_dirs:
-#     sample_name = os.path.basename(sample_dir)
-#     sample_rows = df.loc[df['sample_name'] == sample_name]
-#     temps.append(sample_rows['temp_c'].values)
-#     y.append(sample_rows['impact_energy_j'].values)
-#     for i in range(56):
-#         img_path = os.path.join(sample_dir, f'image{i:04}.tif')
-#         sample_img = imread(img_path, as_gray=True)
-#         sample_img_resized = resize(sample_img, (256, 128)) # Resize to smaller dimensions
-#         sample_features = hog(sample_img_resized, orientations=9, pixels_per_cell=(8, 8), cells_per_block=(2, 2))
-#         X_img.append(sample_features)
-# X_img = np.array(X_img)
-# temps = np.repeat(np.concatenate(temps), 56)
-# y =  np.repeat(np.concatenate(y), 56)
-
-# Preprocess the image data (FOR SLICED IMAGES)
+#Preprocess the image data (UNSLICED RAW)
 X_img = []
 temps = []
 y=[]
 for sample_dir in sample_dirs:
     sample_name = os.path.basename(sample_dir)
     sample_rows = df.loc[df['sample_name'] == sample_name]
-    sample_temps = sample_rows['temp_c'].values
-    sample_energies = sample_rows['impact_energy_j'].values
-    for img_path in glob.glob(os.path.join(sample_dir, '*.jpeg')):
+    temps.append(sample_rows['temp_c'].values)
+    y.append(sample_rows['impact_energy_j'].values)
+    for i in range(56):
+        img_path = os.path.join(sample_dir, f'image{i:04}.tif')
         sample_img = imread(img_path, as_gray=True)
-        sample_img_resized = resize(sample_img, (256, 256))  # Resize to smaller dimensions
+        sample_img_resized = resize(sample_img, (256, 128)) # Resize to smaller dimensions
         sample_features = hog(sample_img_resized, orientations=9, pixels_per_cell=(8, 8), cells_per_block=(2, 2))
         X_img.append(sample_features)
-        temps.append(sample_temps)
-        y.append(sample_energies)
 X_img = np.array(X_img)
-temps = np.concatenate(temps)
-y = np.concatenate(y)
+temps = np.repeat(np.concatenate(temps), 56)
+y =  np.repeat(np.concatenate(y), 56)
+
+# # Preprocess the image data (FOR SLICED IMAGES)
+# X_img = []
+# temps = []
+# y=[]
+# for sample_dir in sample_dirs:
+#     sample_name = os.path.basename(sample_dir)
+#     sample_rows = df.loc[df['sample_name'] == sample_name]
+#     sample_temps = sample_rows['temp_c'].values
+#     sample_energies = sample_rows['impact_energy_j'].values
+#     for img_path in glob.glob(os.path.join(sample_dir, '*.jpeg')):
+#         sample_img = imread(img_path, as_gray=True)
+#         sample_img_resized = resize(sample_img, (256, 256))  # Resize to smaller dimensions
+#         sample_features = hog(sample_img_resized, orientations=9, pixels_per_cell=(8, 8), cells_per_block=(2, 2))
+#         X_img.append(sample_features)
+#         temps.append(sample_temps)
+#         y.append(sample_energies)
+# X_img = np.array(X_img)
+# temps = np.concatenate(temps)
+# y = np.concatenate(y)
 
 # Combine the image data and temperature data
 X = np.hstack((X_img, temps.reshape(-1, 1)))
@@ -170,22 +170,72 @@ svr_y_pred_holdout = svr_model.predict(X_holdout)
 svr_mae_holdout = mean_absolute_error(y_holdout, svr_y_pred_holdout)
 print("SVR MAE on Holdout Test Set:", svr_mae_holdout)
 
+
+from keras.models import Sequential
+from keras.layers import Dense
+
+# Split the data into training, validation, and holdout test sets
+nn_X_train, nn_X_val, nn_y_train, nn_y_val = train_test_split(X_train, y_train, test_size=0.2, random_state=42)
+
+# Define the neural network model
+model = Sequential()
+model.add(Dense(64, activation='relu', input_shape=(X.shape[1],)))  # Input layer
+model.add(Dense(32, activation='relu'))  # Hidden layer
+model.add(Dense(1))  # Output layer
+
+# Compile the model
+model.compile(loss='mean_absolute_error', optimizer='adam')
+
+# Train the neural network model using both the training and validation sets
+history = model.fit(nn_X_train, nn_y_train, validation_data=(nn_X_val, nn_y_val), epochs=30, batch_size=32, verbose=1)
+
+# After training the model, make predictions on the holdout test set and evaluate the performance
+nn_y_pred_holdout = model.predict(X_holdout)
+nn_mae_holdout = mean_absolute_error(y_holdout, nn_y_pred_holdout)
+print("Neural Network MAE on Holdout Test Set:", nn_mae_holdout)
+
+# Access the training history
+print(history.history)
+
+# Plot the training loss and validation loss over epochs
+plt.plot(history.history['loss'], label='Training Loss')
+plt.plot(history.history['val_loss'], label='Validation Loss')
+plt.axhline(y=12.149, color='lightcoral', linestyle='--', label='Baseline MAE (12.149J)')
+plt.xlabel('Epochs')
+plt.ylabel('Loss')
+plt.title('Neural Network Training History (MAE=' + str(round(nn_mae_holdout, 3)) + 'J)')
+plt.legend()
+plt.show()
+
+# Create a scatter plot for Neural Network Regression Model
+plt.scatter(y_holdout, nn_y_pred_holdout, alpha=0.3, s=7)
+plt.plot(np.linspace(0, 400, 100), np.linspace(0, 400, 100), 'r--')
+plt.xlabel('Actual Impact Energy (J)')
+plt.ylabel('Predicted Impact Energy (J)')
+plt.title('Neural Network Regression Performance (MAE=' + str(round(nn_mae_holdout, 3)) + ')')
+
+# Display the plot
+plt.show()
+
+
+
 # Create a figure with two subplots
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5))
 
 # Scatter plot for Random Forest Regression Model
-ax1.scatter(y_holdout, rf_y_pred_holdout, alpha=0.5)
+ax1.scatter(y_holdout, rf_y_pred_holdout, alpha=0.3, s=7)
 ax1.plot(np.linspace(0, 400, 100), np.linspace(0, 400, 100), 'r--')
 ax1.set_xlabel('Actual Impact Energy (J)')
 ax1.set_ylabel('Predicted Impact Energy (J)')
-ax1.set_title('Random Forest Regression Performance (MAE=' + str(round(np.mean(rf_mae_holdout), 4)) +')')
+ax1.set_title('Random Forest Regression Performance (MAE=' + str(round(np.mean(rf_mae_holdout), 3)) +')')
 
 # Scatter plot for Support Vector Regression Model
-ax2.scatter(y_holdout, svr_y_pred_holdout, alpha=0.5)
+ax2.scatter(y_holdout, svr_y_pred_holdout, alpha=0.3, s=7)
 ax2.plot(np.linspace(0, 400, 100), np.linspace(0, 400, 100), 'r--')
 ax2.set_xlabel('Actual Impact Energy (J)')
 ax2.set_ylabel('Predicted Impact Energy (J)')
-ax2.set_title('Support Vector Regression Performance (MAE=' + str(round(np.mean(svr_mae_holdout), 4)) +')')
+ax2.set_title('Support Vector Regression Performance (MAE=' + str(round(np.mean(svr_mae_holdout), 3)) +')')
 
 # Display the plot
+plt.tight_layout()
 plt.show()
