@@ -11,6 +11,8 @@ from sklearn.model_selection import KFold
 import matplotlib.pyplot as plt
 from sklearn.model_selection import GridSearchCV # Hyperparameter tuning heatmap
 import seaborn as sns
+from keras.models import Sequential
+from keras.layers import Dense
 import glob
 
 # Set up the file paths
@@ -170,17 +172,14 @@ svr_y_pred_holdout = svr_model.predict(X_holdout)
 svr_mae_holdout = mean_absolute_error(y_holdout, svr_y_pred_holdout)
 print("SVR MAE on Holdout Test Set:", svr_mae_holdout)
 
-
-from keras.models import Sequential
-from keras.layers import Dense
-
 # Split the data into training, validation, and holdout test sets
 nn_X_train, nn_X_val, nn_y_train, nn_y_val = train_test_split(X_train, y_train, test_size=0.2, random_state=42)
 
 # Define the neural network model
 model = Sequential()
-model.add(Dense(64, activation='relu', input_shape=(X.shape[1],)))  # Input layer
-model.add(Dense(32, activation='relu'))  # Hidden layer
+model.add(Dense(516, activation='relu', input_shape=(X.shape[1],)))  # Input layer
+model.add(Dense(256, activation='relu'))  # Hidden layer
+model.add(Dense(128, activation='relu'))  # Hidden layer
 model.add(Dense(1))  # Output layer
 
 # Compile the model
@@ -196,6 +195,10 @@ print("Neural Network MAE on Holdout Test Set:", nn_mae_holdout)
 
 # Access the training history
 print(history.history)
+
+#initialize plot theme
+sns.set_theme()  # Set figure theme
+sns.set_style('darkgrid')  # Set figure style
 
 # Plot the training loss and validation loss over epochs
 plt.plot(history.history['loss'], label='Training Loss')
