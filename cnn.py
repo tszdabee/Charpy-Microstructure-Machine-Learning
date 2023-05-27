@@ -17,6 +17,8 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_absolute_error
 from sklearn.linear_model import LinearRegression
 from sklearn.utils.class_weight import compute_class_weight
+from sklearn.svm import SVR
+from sklearn.ensemble import RandomForestRegressor
 
 # Function to compile all train/test data with outputs into array
 def getdata(folder):
@@ -129,7 +131,7 @@ axl2.set_xlabel('Sample #')
 
 plt.show()
 
-# Model 2: EfficientNetb0
+# Model 2: EfficientNetb3
 # convert grayscale to rgb since EfficientNet pretrained on rgb
 X_train = np.asarray([(np.dstack([X_train[i], X_train[i], X_train[i]])) for i in range(len(X_train))])
 X_val = np.asarray([(np.dstack([X_val[i], X_val[i], X_val[i]])) for i in range(len(X_val))])
@@ -138,8 +140,8 @@ X_test = np.asarray([(np.dstack([X_test[i], X_test[i], X_test[i]])) for i in ran
 img_size = len(X_train[0])
 img_input = Input(shape=(img_size, img_size, 3)) #image input shape
 temp_input = Input(shape=(1,), name='temp_input') #define temp input shape
-# Use EfficientNetb0
-base_model = tf.keras.applications.EfficientNetB0(include_top=False,  # Now acts as feature extraction
+# Use EfficientNetb3
+base_model = tf.keras.applications.EfficientNetB3(include_top=False,  # Now acts as feature extraction
                                            weights='imagenet',
                                            # input_tensor=new_input,
                                            pooling='max',
@@ -148,22 +150,25 @@ base_model = tf.keras.applications.EfficientNetB0(include_top=False,  # Now acts
 for layer in base_model.layers:
     layer.trainable = False
 # Define model (image branch)
-x = base_model(img_input) # image branch
-x = BatchNormalization()(x)
-x = Dropout(rate=0.45)(x)
-x = Flatten()(x)
-temp_input = Input(shape=(1,)) #temperature branch
-t = BatchNormalization()(temp_input)
-#t = Dense(32, activation='relu')(temp_input)
-x = Concatenate()([x, t]) #concatenate temp feature at end of EffNet feature extraction
+features = base_model(img_input) # image branch
+features = BatchNormalization()(features)
+features = Dropout(rate=0.45)(features)
+flat_features = Flatten()(features)
+
+# Temperature input branch
+temp_input = Input(shape=(1,))
+normalized_temp = BatchNormalization()(temp_input)
+temp_dense = Dense(516, activation='relu')(normalized_temp) # introduce dense layer before concat for higher weight
+flat_features = Concatenate()([flat_features, temp_dense]) #concatenate temp feature at end of EffNet feature extraction
 
 # Add fully connected layers
-x = Dense(64, activation='relu')(x)
+x = Dense(64, activation='relu')(flat_features)
 x = Dense(32, activation='relu')(x)
 
 output = Dense(1)(x)
 
-model = tf.keras.Model(inputs=[img_input, temp_input], outputs=output)
+model = tf.keras.Model(inputs=[img_input, temp_input], outputs=output) # 1st model for NN prediction
+model2 = tf.keras.Model(inputs=[img_input, temp_input], outputs=flat_features) # 2nd model for SVR, RF prediction
 
 model.summary()
 
@@ -179,7 +184,7 @@ model.compile(loss='mean_absolute_error',
 
 # Training model
 # checkpoint to save best models
-filepath = "/Users/tszdabee/Desktop/FYP_Code/Model/test.b0.hdf5"
+filepath = "/Users/tszdabee/Desktop/FYP_Code/Model/test.b3.hdf5"
 checkpoint = keras.callbacks.ModelCheckpoint(filepath, monitor="val_mean_absolute_error", verbose=1, save_best_only=True,
                                              mode='min')  # Save new model if error decreases
 es = keras.callbacks.EarlyStopping(monitor="val_mean_absolute_error", patience=20, restore_best_weights=True)  # stop running after 5 epochs no improvement
@@ -206,7 +211,7 @@ def plot_hist(history):
     axs[0].set_title('Model Mean Absolute Error (' + str(round(np.min(val_mae), 4)) + 'J)')
     axs[0].set_ylabel('Mean Absolute Error (J) for Training and Validation')
     axs[0].set_xlabel('Epoch')
-    axs[0].legend(['mae baseline (' + str(mae_baseline) + ')', 'training', 'validation'], loc='upper left')
+    axs[0].legend(['mae baseline (' + str(np.round(mae_baseline,3)) + 'J)', 'training', 'validation'], loc='upper right')
     train_loss = [x*scaler.data_range_[0] for x in history.history['loss']] #plot loss
     val_loss = [x*scaler.data_range_[0] for x in history.history['val_loss']]
     axs[1].axhline(y=mae_baseline, color="lightcoral", linestyle="dashed")
@@ -215,13 +220,13 @@ def plot_hist(history):
     axs[1].set_title('Model Loss for Training and Validation (' + str(round(np.min(val_loss), 4)) + 'J)')
     axs[1].set_ylabel('Loss (J)')
     axs[1].set_xlabel('Epoch')
-    axs[1].legend(['mae baseline (' + str(mae_baseline) + ')', 'training', 'validation'], loc='upper right')
+    axs[1].legend(['mae baseline (' + str(np.round(mae_baseline,3)) + 'J)', 'training', 'validation'], loc='upper right')
     plt.show()
 plot_hist(history)
 
 
 # basic predict + evaluation with unseen test data
-model = keras.models.load_model("/Users/tszdabee/Desktop/FYP_Code/Model/test.b0.hdf5", custom_objects={'MeanAbsoluteError': MeanAbsoluteError()})
+model = keras.models.load_model("/Users/tszdabee/Desktop/FYP_Code/Model/test.b3.hdf5", custom_objects={'MeanAbsoluteError': MeanAbsoluteError()})
 
 test_loss, test_mae = model.evaluate([X_test, X_test_temp], y_test, verbose=0) #evaluate model
 print("The loss of the model on unseen data is: ", test_loss*scaler.data_range_[0]) #inverse transform back to actual
@@ -232,7 +237,7 @@ y_pred = model.predict([X_test, X_test_temp])
 y_test_norm = scaler.inverse_transform(y_test.reshape(-1, 1)).reshape(-1,) #inverse transform test and prediction values for visualization
 y_pred_norm = scaler.inverse_transform(y_pred.reshape(-1, 1)).reshape(-1,)
 fig, ax = plt.subplots(figsize=(12, 6))
-ax.scatter(y_test_norm, y_pred_norm, s=7) #create scatterplot
+ax.scatter(y_test_norm, y_pred_norm, s=7, alpha=0.3) #create scatterplot
 ax.plot([min(y_test_norm), max(y_test_norm)], [min(y_test_norm), max(y_test_norm)], 'r--')
 ax.set_xlabel('Actual Values')
 ax.set_ylabel('Predicted Values')
@@ -240,10 +245,52 @@ ax.set_title('Actual vs Predicted Values (MAE=' + str(round(test_mae*scaler.data
 plt.show()
 
 
-# inverse scale back to nominal values (not really needed)
-# y_train = scaler.inverse_transform(y_train.reshape(-1, 1)).reshape(-1,)
-# y_val = scaler.inverse_transform(y_val.reshape(-1, 1)).reshape(-1,)
-# y_test = scaler.inverse_transform(y_test.reshape(-1, 1)).reshape(-1,)
+#### SVR and RANDOM FOREST PREDICTION with Transfer Learning
+# Get the flat features from model2
+train_flat_features = model2.predict([X_train, X_train_temp])
+val_flat_features = model2.predict([X_val, X_val_temp])
+test_flat_features = model2.predict([X_test, X_test_temp])
+# Train and evaluate SVR model
+svr_model = SVR()
+svr_model.fit(np.concatenate([train_flat_features, val_flat_features]), np.concatenate([y_train, y_val]))
+svr_predictions = svr_model.predict(test_flat_features)
+svr_mae = mean_absolute_error(y_test, svr_predictions)
+# Train and evaluate RF model
+rf_model = RandomForestRegressor()
+rf_model.fit(np.concatenate([train_flat_features, val_flat_features]), np.concatenate([y_train, y_val]))
+rf_predictions = rf_model.predict(test_flat_features)
+rf_mae = mean_absolute_error(y_test, rf_predictions)
+print("SVR MAE:", svr_mae*scaler.data_range_[0])
+print("RF MAE:", rf_mae*scaler.data_range_[0])
+
+
+# Create a figure with two subplots
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5))
+
+# Scatter plot for Random Forest Regression Model
+ax1.scatter(y_test*scaler.data_range_[0], rf_predictions*scaler.data_range_[0], alpha=0.3, s=7)
+ax1.plot(np.linspace(0, 400, 100), np.linspace(0, 400, 100), 'r--')
+ax1.set_xlabel('Actual Impact Energy (J)')
+ax1.set_ylabel('Predicted Impact Energy (J)')
+ax1.set_title('Random Forest Regression Performance (MAE=' + str(round(rf_mae*scaler.data_range_[0], 3)) +')')
+
+# Scatter plot for Support Vector Regression Model
+ax2.scatter(y_test*scaler.data_range_[0], svr_predictions*scaler.data_range_[0], alpha=0.3, s=7)
+ax2.plot(np.linspace(0, 400, 100), np.linspace(0, 400, 100), 'r--')
+ax2.set_xlabel('Actual Impact Energy (J)')
+ax2.set_ylabel('Predicted Impact Energy (J)')
+ax2.set_title('Support Vector Regression Performance (MAE=' + str(round(svr_mae*scaler.data_range_[0], 3)) +')')
+
+# Display the plot
+plt.tight_layout()
+plt.show()
+
+
+
+
+
+
+
 
 
 # plot architecture (Not working very well at the moment, will conduct manually with model summary)
