@@ -89,9 +89,6 @@ svr_grid_search.fit(X_train, y_train)
 # The thing is that GridSearchCV, by convention, always tries to maximize its score so loss functions like MSE have to be negated.The unified scoring API always maximizes the score, so scores which need to be minimized are negated in order for the unified scoring API to work correctly. The score that is returned is therefore negated when it is a score that should be minimized and left positive if it is a score that should be maximized.
 # Convention that higher values are better than lower.
 
-# Print the best hyperparameters
-print("Best SVR Hyperparameters:", svr_grid_search.best_params_)
-
 # Extract results into a pandas DataFrame
 results = pd.DataFrame(svr_grid_search.cv_results_)
 
@@ -119,9 +116,6 @@ rf_model = RandomForestRegressor(random_state=42)
 rf_grid_search = GridSearchCV(rf_model, param_grid, cv=kf, scoring='neg_mean_absolute_error', verbose=3)
 rf_grid_search.fit(X_train, y_train)
 
-# Print the best hyperparameters
-print("Best Random Forest Hyperparameters:", rf_grid_search.best_params_)
-
 # Create a heatmap of the mean test scores for each combination of hyperparameters
 scores = rf_grid_search.cv_results_['mean_test_score'].reshape(len(param_grid['n_estimators']), len(param_grid['max_depth']))
 sns.heatmap(scores, cmap='hot', annot=True, fmt=".3f", cbar_kws={'label': 'Negative Mean Absolute Test Score'})
@@ -145,6 +139,10 @@ for train_index, test_index in kf.split(X):
     rf_mae = mean_absolute_error(y_test_fold, rf_y_pred)
     rf_mae_scores.append(rf_mae)
 
+
+# Print the best hyperparameters
+print("Best Random Forest Hyperparameters:", rf_grid_search.best_params_)
+
 print("Random Forest MAE Scores during Cross-Validation:", rf_mae_scores)
 print("Random Forest Mean MAE during Cross-Validation:", np.mean(rf_mae_scores))
 
@@ -164,6 +162,9 @@ for train_index, test_index in kf.split(X):
     svr_mae = mean_absolute_error(y_test_fold, svr_y_pred)
     svr_mae_scores.append(svr_mae)
 
+# Print the best hyperparameters
+print("Best SVR Hyperparameters:", svr_grid_search.best_params_)
+
 print("SVR MAE Scores during Cross-Validation:", svr_mae_scores)
 print("SVR Mean MAE during Cross-Validation:", np.mean(svr_mae_scores))
 
@@ -177,9 +178,8 @@ nn_X_train, nn_X_val, nn_y_train, nn_y_val = train_test_split(X_train, y_train, 
 
 # Define the neural network model
 model = Sequential()
-model.add(Dense(516, activation='relu', input_shape=(X.shape[1],)))  # Input layer
-model.add(Dense(256, activation='relu'))  # Hidden layer
-model.add(Dense(128, activation='relu'))  # Hidden layer
+model.add(Dense(64, activation='relu', input_shape=(X.shape[1],)))  # Input layer
+model.add(Dense(32, activation='relu'))  # Hidden layer
 model.add(Dense(1))  # Output layer
 
 # Compile the model
@@ -215,7 +215,7 @@ plt.scatter(y_holdout, nn_y_pred_holdout, alpha=0.3, s=7)
 plt.plot(np.linspace(0, 400, 100), np.linspace(0, 400, 100), 'r--')
 plt.xlabel('Actual Impact Energy (J)')
 plt.ylabel('Predicted Impact Energy (J)')
-plt.title('Neural Network Regression Performance (MAE=' + str(round(nn_mae_holdout, 3)) + ')')
+plt.title('Neural Network Regression Performance (MAE=' + str(round(nn_mae_holdout, 3)) + 'J)')
 
 # Display the plot
 plt.show()
@@ -230,14 +230,14 @@ ax1.scatter(y_holdout, rf_y_pred_holdout, alpha=0.3, s=7)
 ax1.plot(np.linspace(0, 400, 100), np.linspace(0, 400, 100), 'r--')
 ax1.set_xlabel('Actual Impact Energy (J)')
 ax1.set_ylabel('Predicted Impact Energy (J)')
-ax1.set_title('Random Forest Regression Performance (MAE=' + str(round(np.mean(rf_mae_holdout), 3)) +')')
+ax1.set_title('Random Forest Regression Performance (MAE=' + str(round(np.mean(rf_mae_holdout), 3)) +'J)')
 
 # Scatter plot for Support Vector Regression Model
 ax2.scatter(y_holdout, svr_y_pred_holdout, alpha=0.3, s=7)
 ax2.plot(np.linspace(0, 400, 100), np.linspace(0, 400, 100), 'r--')
 ax2.set_xlabel('Actual Impact Energy (J)')
 ax2.set_ylabel('Predicted Impact Energy (J)')
-ax2.set_title('Support Vector Regression Performance (MAE=' + str(round(np.mean(svr_mae_holdout), 3)) +')')
+ax2.set_title('Support Vector Regression Performance (MAE=' + str(round(np.mean(svr_mae_holdout), 3)) +'J)')
 
 # Display the plot
 plt.tight_layout()
