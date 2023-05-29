@@ -19,6 +19,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.utils.class_weight import compute_class_weight
 from sklearn.svm import SVR
 from sklearn.ensemble import RandomForestRegressor
+from tensorflow.keras.applications.vgg16 import VGG16 #VGG16 instead of EffNetB0
 
 # Function to compile all train/test data with outputs into array
 def getdata(folder):
@@ -113,6 +114,11 @@ print("Shape for y_train: ", np.shape(y_train))
 df_train = pd.DataFrame({'train_label': y_train})
 df_test = pd.DataFrame({'test_label': y_test})
 
+# Denormalize train/test labels for data visualization
+df_train['train_label_plot'] = df_train['train_label'].multiply(scaler.data_range_[0]).round(1)
+df_test['test_label_plot'] = df_test['test_label'].multiply(scaler.data_range_[0]).round(1)
+
+
 # Visualizing the dataset
 # Plot no. of Training and Testing data
 plt.figure(figsize=(10, 10))  # Define plot
@@ -120,18 +126,18 @@ sns.set_theme()  # Set figure theme
 sns.set_style('darkgrid')  # Set figure style
 
 plt.subplot(2, 1, 1)  # 2 rows, 1 column, 1st graph
-axl1 = sns.countplot(x='train_label', data=df_train, palette=sns.color_palette("pastel"))  # Plot with palette
+axl1 = sns.countplot(x='train_label_plot', data=df_train, palette=sns.color_palette("pastel"))  # Plot with palette
 axl1.set_title("Training Image Distribution (n = " + str(len(y_train)) + ")")
-axl1.set_xlabel('Sample #')
+axl1.set_xlabel('Sample Charpy impact energy (J)')
 
 plt.subplot(2, 1, 2)  # 2 rows, 1 column, 2nd graph
-axl2 = sns.countplot(x='test_label', data=df_test, palette=sns.color_palette("pastel"))
+axl2 = sns.countplot(x='test_label_plot', data=df_test, palette=sns.color_palette("pastel"))
 axl2.set_title("Testing Image Distribution (n = " + str(len(y_test)) + ")")
-axl2.set_xlabel('Sample #')
+axl2.set_xlabel('Sample Charpy impact energy (J)')
 
 plt.show()
 
-# Model 2: EfficientNetb3
+# Model 2: Transfer Learning EfficientNet/VGG16
 # convert grayscale to rgb since EfficientNet pretrained on rgb
 X_train = np.asarray([(np.dstack([X_train[i], X_train[i], X_train[i]])) for i in range(len(X_train))])
 X_val = np.asarray([(np.dstack([X_val[i], X_val[i], X_val[i]])) for i in range(len(X_val))])
@@ -140,12 +146,18 @@ X_test = np.asarray([(np.dstack([X_test[i], X_test[i], X_test[i]])) for i in ran
 img_size = len(X_train[0])
 img_input = Input(shape=(img_size, img_size, 3)) #image input shape
 temp_input = Input(shape=(1,), name='temp_input') #define temp input shape
-# Use EfficientNetb3
-base_model = tf.keras.applications.EfficientNetB3(include_top=False,  # Now acts as feature extraction
-                                           weights='imagenet',
-                                           # input_tensor=new_input,
-                                           pooling='max',
-                                           drop_connect_rate=0.2)  # dropout of 0.5 instead of 0.2 default, prevent overfit
+# # Use EfficientNetb0
+# base_model = tf.keras.applications.EfficientNetB0(include_top=False,  # Now acts as feature extraction
+#                                            weights='imagenet',
+#                                            # input_tensor=new_input,
+#                                            pooling='max',
+#                                            drop_connect_rate=0.2)  # dropout of 0.5 instead of 0.2 default, prevent overfit
+# Use VGG16
+base_model = VGG16(include_top=False,  # Now acts as feature extraction
+                   weights='imagenet',
+                   input_tensor=img_input,
+                   pooling='max')
+
 # Freeze pretrained model layers
 for layer in base_model.layers:
     layer.trainable = False
@@ -184,7 +196,7 @@ model.compile(loss='mean_absolute_error',
 
 # Training model
 # checkpoint to save best models
-filepath = "/Users/tszdabee/Desktop/FYP_Code/Model/test.b3.hdf5"
+filepath = "/Users/tszdabee/Desktop/FYP_Code/Model/test.vgg16.hdf5"
 checkpoint = keras.callbacks.ModelCheckpoint(filepath, monitor="val_mean_absolute_error", verbose=1, save_best_only=True,
                                              mode='min')  # Save new model if error decreases
 es = keras.callbacks.EarlyStopping(monitor="val_mean_absolute_error", patience=20, restore_best_weights=True)  # stop running after 5 epochs no improvement
@@ -226,7 +238,7 @@ plot_hist(history)
 
 
 # basic predict + evaluation with unseen test data
-model = keras.models.load_model("/Users/tszdabee/Desktop/FYP_Code/Model/test.b3.hdf5", custom_objects={'MeanAbsoluteError': MeanAbsoluteError()})
+model = keras.models.load_model("/Users/tszdabee/Desktop/FYP_Code/Model/test.vgg16.hdf5", custom_objects={'MeanAbsoluteError': MeanAbsoluteError()})
 
 test_loss, test_mae = model.evaluate([X_test, X_test_temp], y_test, verbose=0) #evaluate model
 print("The loss of the model on unseen data is: ", test_loss*scaler.data_range_[0]) #inverse transform back to actual
@@ -241,7 +253,7 @@ ax.scatter(y_test_norm, y_pred_norm, s=7, alpha=0.3) #create scatterplot
 ax.plot([min(y_test_norm), max(y_test_norm)], [min(y_test_norm), max(y_test_norm)], 'r--')
 ax.set_xlabel('Actual Values')
 ax.set_ylabel('Predicted Values')
-ax.set_title('Actual vs Predicted Values (MAE=' + str(round(test_mae*scaler.data_range_[0], 4)) + ')')
+ax.set_title('Fully Connected Neural Network Performance (MAE=' + str(round(test_mae*scaler.data_range_[0], 4)) + 'J)')
 plt.show()
 
 
@@ -272,14 +284,14 @@ ax1.scatter(y_test*scaler.data_range_[0], rf_predictions*scaler.data_range_[0], 
 ax1.plot(np.linspace(0, 400, 100), np.linspace(0, 400, 100), 'r--')
 ax1.set_xlabel('Actual Impact Energy (J)')
 ax1.set_ylabel('Predicted Impact Energy (J)')
-ax1.set_title('Random Forest Regression Performance (MAE=' + str(round(rf_mae*scaler.data_range_[0], 3)) +')')
+ax1.set_title('Random Forest Regression Performance (MAE=' + str(round(rf_mae*scaler.data_range_[0], 3)) +'J)')
 
 # Scatter plot for Support Vector Regression Model
 ax2.scatter(y_test*scaler.data_range_[0], svr_predictions*scaler.data_range_[0], alpha=0.3, s=7)
 ax2.plot(np.linspace(0, 400, 100), np.linspace(0, 400, 100), 'r--')
 ax2.set_xlabel('Actual Impact Energy (J)')
 ax2.set_ylabel('Predicted Impact Energy (J)')
-ax2.set_title('Support Vector Regression Performance (MAE=' + str(round(svr_mae*scaler.data_range_[0], 3)) +')')
+ax2.set_title('Support Vector Regression Performance (MAE=' + str(round(svr_mae*scaler.data_range_[0], 3)) +'J)')
 
 # Display the plot
 plt.tight_layout()
