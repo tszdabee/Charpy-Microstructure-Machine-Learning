@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from tensorflow.keras.preprocessing.image import ImageDataGenerator, img_to_array, load_img
 import tensorflow as tf
 
-image_filename = 'dataset-master/TRAIN/Sample03/image0011.tif'
+image_filename = 'dog.jpg'#'dataset-raw/Sample03/image0012.tif'
 img = load_img(image_filename)
 
 #---convert the image to 3D array---
@@ -19,24 +19,8 @@ images_data = np.expand_dims(image_data, axis=0)
 #---convert the image into greyscale (one dimensional)---
 images_data = tf.image.rgb_to_grayscale(images_data)
 
-""" #skimage preprocessing
-from skimage import data, io, filters, exposure
-p = io.imread("images/image.tif")
-
-## 1. Image Sharpening
-SharpImg = filters.unsharp_mask(p, radius = 20.0, amount = 1.0) # sharpening
-SharpImg = exposure.adjust_gamma(SharpImg) # gamma correction on image
-
-## Plotting Results
-fig, ax = plt.subplots(nrows =1, ncols =2, sharex = True, figsize =(15,15))
-ax[0].imshow(p, cmap = 'gray')
-ax[0].set_title("Original", fontsize = 10)
-ax[1].imshow(SharpImg, cmap ='gray')
-ax[1].set_title("Sharpened",fontsize = 10)
-plt.show()
-"""
-datagen = ImageDataGenerator(width_shift_range=0.1,
-                             height_shift_range=0.1,
+datagen = ImageDataGenerator(width_shift_range=0.2,
+                             height_shift_range=0.2,
                              horizontal_flip=True,
                              vertical_flip=True,
                              rotation_range=60,
@@ -47,16 +31,18 @@ datagen = ImageDataGenerator(width_shift_range=0.1,
                              )
 train_generator = datagen.flow(images_data, batch_size=1)
 
-#initialize plot axes
-rows = 3
+# initialize plot axes
+rows = 2
 columns = 3
 fig, axes = plt.subplots(rows,columns)
 for r in range(rows):
     for c in range(columns):
         image_batch = train_generator.next()
         image = image_batch[0].astype('uint8')
-        axes[r,c].imshow(image, cmap = 'gray') #plot images, grayscale
+        axes[r, c].imshow(image, cmap = 'gray') #plot images, grayscale
+        axes[r, c].axis('off')  # remove axis labels
 fig.set_size_inches(15,10)
+plt.tight_layout()
 plt.show() # show images
 
-#NOTE: This augmentation does not rescale image by 1/255, need to do for final
+# NOTE: This augmentation does not rescale image by 1/255, need to do for final
