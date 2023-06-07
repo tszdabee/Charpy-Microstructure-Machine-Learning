@@ -13,7 +13,6 @@ from sklearn.model_selection import GridSearchCV # Hyperparameter tuning heatmap
 import seaborn as sns
 from keras.models import Sequential
 from keras.layers import Dense
-import glob
 
 # Set up the file paths
 main_dir = '/Users/tszdabee/Desktop/FYP_Code/'
@@ -95,7 +94,7 @@ results = pd.DataFrame(svr_grid_search.cv_results_)
 # Create heatmap of mean test score by hyperparameters
 scores_svr = svr_grid_search.cv_results_['mean_test_score'].reshape(len(param_grid['C']), len(param_grid['gamma']), len(param_grid['epsilon']))
 scores_svr_mean = np.mean(scores_svr, axis=2) # Taking the mean across epsilon values for heatmap visualization
-sns.heatmap(pd.DataFrame(scores_svr_mean, index=param_grid['C'], columns=param_grid['gamma']), annot=True, cmap='hot', cbar_kws={'label': 'Negative Mean Absolute Test Score'}, fmt='.3f')
+sns.heatmap(pd.DataFrame(scores_svr_mean, index=param_grid['C'], columns=param_grid['gamma']), annot=True, cmap='hot', cbar_kws={'label': 'Negative Mean Absolute Error'}, fmt='.3f')
 plt.title("Support Vector Regression (SVR) Hyperparameter Tuning")
 plt.ylabel('C')
 plt.xlabel('Gamma')
@@ -118,7 +117,7 @@ rf_grid_search.fit(X_train, y_train)
 
 # Create a heatmap of the mean test scores for each combination of hyperparameters
 scores = rf_grid_search.cv_results_['mean_test_score'].reshape(len(param_grid['n_estimators']), len(param_grid['max_depth']))
-sns.heatmap(scores, cmap='hot', annot=True, fmt=".3f", cbar_kws={'label': 'Negative Mean Absolute Test Score'})
+sns.heatmap(scores, cmap='hot', annot=True, fmt=".3f", cbar_kws={'label': 'Negative Mean Absolute Error'})
 plt.yticks(range(len(param_grid['max_depth'])), param_grid['max_depth'])
 plt.xticks(range(len(param_grid['n_estimators'])), param_grid['n_estimators'])
 plt.ylabel('Max Depth')
@@ -210,34 +209,35 @@ plt.title('Neural Network Training History (MAE=' + str(round(nn_mae_holdout, 3)
 plt.legend()
 plt.show()
 
-# Create a scatter plot for Neural Network Regression Model
-plt.scatter(y_holdout, nn_y_pred_holdout, alpha=0.3, s=7)
-plt.plot(np.linspace(0, 400, 100), np.linspace(0, 400, 100), 'r--')
-plt.xlabel('Actual Impact Energy (J)')
-plt.ylabel('Predicted Impact Energy (J)')
-plt.title('Neural Network Regression Performance (MAE=' + str(round(nn_mae_holdout, 3)) + 'J)')
-
-# Display the plot
-plt.show()
-
-
-
 # Create a figure with two subplots
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5))
+fig, (ax, ax1, ax2) = plt.subplots(1, 3, figsize=(15, 5))
+
+# Create a scatter plot for Neural Network Regression Model
+ax.scatter(y_holdout, nn_y_pred_holdout, alpha=0.3, s=7, label='Data Points')
+ax.plot(np.linspace(0, 400, 100), np.linspace(0, 400, 100), 'r--', label='Perfect Fit (1:1)')
+ax.set_xlabel('Actual Impact Energy (J)')
+ax.set_ylabel('Predicted Impact Energy (J)')
+ax.set_title('HOG with FCNN Performance (MAE=' + str(round(nn_mae_holdout, 1)) + 'J)')
+ax.legend()
+ax.set_ylim(ax.get_ylim())
 
 # Scatter plot for Random Forest Regression Model
-ax1.scatter(y_holdout, rf_y_pred_holdout, alpha=0.3, s=7)
-ax1.plot(np.linspace(0, 400, 100), np.linspace(0, 400, 100), 'r--')
+ax1.scatter(y_holdout, rf_y_pred_holdout, alpha=0.3, s=7, label='Data Points')
+ax1.plot(np.linspace(0, 400, 100), np.linspace(0, 400, 100), 'r--', label='Perfect Fit (1:1)')
 ax1.set_xlabel('Actual Impact Energy (J)')
 ax1.set_ylabel('Predicted Impact Energy (J)')
-ax1.set_title('Random Forest Regression Performance (MAE=' + str(round(np.mean(rf_mae_holdout), 3)) +'J)')
+ax1.set_title('HOG with RFR Performance (MAE=' + str(round(np.mean(rf_mae_holdout), 1)) +'J)')
+ax1.legend()
+ax1.set_ylim(ax.get_ylim())
 
 # Scatter plot for Support Vector Regression Model
-ax2.scatter(y_holdout, svr_y_pred_holdout, alpha=0.3, s=7)
-ax2.plot(np.linspace(0, 400, 100), np.linspace(0, 400, 100), 'r--')
+ax2.scatter(y_holdout, svr_y_pred_holdout, alpha=0.3, s=7, label='Data Points')
+ax2.plot(np.linspace(0, 400, 100), np.linspace(0, 400, 100), 'r--', label='Perfect Fit (1:1)')
 ax2.set_xlabel('Actual Impact Energy (J)')
 ax2.set_ylabel('Predicted Impact Energy (J)')
-ax2.set_title('Support Vector Regression Performance (MAE=' + str(round(np.mean(svr_mae_holdout), 3)) +'J)')
+ax2.set_title('HOG with SVR Performance (MAE=' + str(round(np.mean(svr_mae_holdout), 1)) +'J)')
+ax2.legend()
+ax2.set_ylim(ax.get_ylim())
 
 # Display the plot
 plt.tight_layout()
