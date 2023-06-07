@@ -8,10 +8,8 @@ import os  # navigate directories
 from PIL import Image  # read images
 import tensorflow as tf  # tensorflow
 import tensorflow.keras as keras
-from keras.models import Sequential
-from keras.layers import Dense, Conv2D, BatchNormalization, Dropout, MaxPool2D, Input, Softmax, Activation, Flatten, Concatenate, Lambda
-from keras.utils.np_utils import to_categorical  # convert categorical form
-from tensorflow.keras.losses import MeanAbsoluteError, MeanAbsolutePercentageError #losses
+from keras.layers import Dense, Conv2D, BatchNormalization, Dropout, Input, Flatten, Concatenate
+from tensorflow.keras.losses import MeanAbsoluteError #losses
 from tensorflow.keras.preprocessing.image import ImageDataGenerator  # image augmentation
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_absolute_error
@@ -115,26 +113,27 @@ df_train = pd.DataFrame({'train_label': y_train})
 df_test = pd.DataFrame({'test_label': y_test})
 
 # Denormalize train/test labels for data visualization
-df_train['train_label_plot'] = df_train['train_label'].multiply(scaler.data_range_[0]).round(1)
-df_test['test_label_plot'] = df_test['test_label'].multiply(scaler.data_range_[0]).round(1)
+df_train['train_label_plot'] = df_train['train_label'].multiply(scaler.data_range_[0]).round(0)
+df_test['test_label_plot'] = df_test['test_label'].multiply(scaler.data_range_[0]).round(0)
 
 
 # Visualizing the dataset
 # Plot no. of Training and Testing data
-plt.figure(figsize=(10, 10))  # Define plot
+plt.figure(figsize=(15, 5))  # Define plot
 sns.set_theme()  # Set figure theme
 sns.set_style('darkgrid')  # Set figure style
 
-plt.subplot(2, 1, 1)  # 2 rows, 1 column, 1st graph
+plt.subplot(1, 2, 1)  # 1 rows, 2 column, 1st graph
 axl1 = sns.countplot(x='train_label_plot', data=df_train, palette=sns.color_palette("pastel"))  # Plot with palette
 axl1.set_title("Training Image Distribution (n = " + str(len(y_train)) + ")")
 axl1.set_xlabel('Sample Charpy impact energy (J)')
 
-plt.subplot(2, 1, 2)  # 2 rows, 1 column, 2nd graph
+plt.subplot(1, 2, 2)  # 1 rows, 2 column, 2nd graph
 axl2 = sns.countplot(x='test_label_plot', data=df_test, palette=sns.color_palette("pastel"))
 axl2.set_title("Testing Image Distribution (n = " + str(len(y_test)) + ")")
 axl2.set_xlabel('Sample Charpy impact energy (J)')
 
+plt.tight_layout()  # Adjust spacing between subplots
 plt.show()
 
 # Model 2: Transfer Learning EfficientNet/VGG16
@@ -147,16 +146,16 @@ img_size = len(X_train[0])
 img_input = Input(shape=(img_size, img_size, 3)) #image input shape
 temp_input = Input(shape=(1,), name='temp_input') #define temp input shape
 # # Use EfficientNetb0
-# base_model = tf.keras.applications.EfficientNetB0(include_top=False,  # Now acts as feature extraction
-#                                            weights='imagenet',
-#                                            # input_tensor=new_input,
-#                                            pooling='max',
-#                                            drop_connect_rate=0.2)  # dropout of 0.5 instead of 0.2 default, prevent overfit
+base_model = tf.keras.applications.EfficientNetB0(include_top=False,  # Now acts as feature extraction
+                                           weights='imagenet',
+                                           # input_tensor=new_input,
+                                           pooling='max',
+                                           drop_connect_rate=0.2)  # dropout of 0.5 instead of 0.2 default, prevent overfit
 # Use VGG16
-base_model = VGG16(include_top=False,  # Now acts as feature extraction
-                   weights='imagenet',
-                   input_tensor=img_input,
-                   pooling='max')
+# base_model = VGG16(include_top=False,  # Now acts as feature extraction
+#                    weights='imagenet',
+#                    input_tensor=img_input,
+#                    pooling='max')
 
 # Freeze pretrained model layers
 for layer in base_model.layers:
@@ -196,7 +195,7 @@ model.compile(loss='mean_absolute_error',
 
 # Training model
 # checkpoint to save best models
-filepath = "/Users/tszdabee/Desktop/FYP_Code/Model/test.vgg16.hdf5"
+filepath = "/Users/tszdabee/Desktop/FYP_Code/Model/test.b0.hdf5"
 checkpoint = keras.callbacks.ModelCheckpoint(filepath, monitor="val_mean_absolute_error", verbose=1, save_best_only=True,
                                              mode='min')  # Save new model if error decreases
 es = keras.callbacks.EarlyStopping(monitor="val_mean_absolute_error", patience=20, restore_best_weights=True)  # stop running after 5 epochs no improvement
@@ -238,23 +237,16 @@ plot_hist(history)
 
 
 # basic predict + evaluation with unseen test data
-model = keras.models.load_model("/Users/tszdabee/Desktop/FYP_Code/Model/test.vgg16.hdf5", custom_objects={'MeanAbsoluteError': MeanAbsoluteError()})
+model = keras.models.load_model("/Users/tszdabee/Desktop/FYP_Code/Model/test.b0.hdf5", custom_objects={'MeanAbsoluteError': MeanAbsoluteError()})
 
 test_loss, test_mae = model.evaluate([X_test, X_test_temp], y_test, verbose=0) #evaluate model
 print("The loss of the model on unseen data is: ", test_loss*scaler.data_range_[0]) #inverse transform back to actual
 print('The mean absolute error of the model on unseen data is:', test_mae*scaler.data_range_[0])
 
-# trained model to predict test data (unseen)
+# trained model to predict test data (unseen FCNN)
 y_pred = model.predict([X_test, X_test_temp])
 y_test_norm = scaler.inverse_transform(y_test.reshape(-1, 1)).reshape(-1,) #inverse transform test and prediction values for visualization
 y_pred_norm = scaler.inverse_transform(y_pred.reshape(-1, 1)).reshape(-1,)
-fig, ax = plt.subplots(figsize=(12, 6))
-ax.scatter(y_test_norm, y_pred_norm, s=7, alpha=0.3) #create scatterplot
-ax.plot([min(y_test_norm), max(y_test_norm)], [min(y_test_norm), max(y_test_norm)], 'r--')
-ax.set_xlabel('Actual Values')
-ax.set_ylabel('Predicted Values')
-ax.set_title('Fully Connected Neural Network Performance (MAE=' + str(round(test_mae*scaler.data_range_[0], 4)) + 'J)')
-plt.show()
 
 
 #### SVR and RANDOM FOREST PREDICTION with Transfer Learning
@@ -276,22 +268,36 @@ print("SVR MAE:", svr_mae*scaler.data_range_[0])
 print("RF MAE:", rf_mae*scaler.data_range_[0])
 
 
+
 # Create a figure with two subplots
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5))
+fig, (ax, ax1, ax2) = plt.subplots(1, 3, figsize=(15, 5))
+
+# Scatter plot for FCNN
+ax.scatter(y_test_norm, y_pred_norm, s=7, alpha=0.3, label='Data Points') #create scatterplot
+ax.plot(np.linspace(0, 400, 100), np.linspace(0, 400, 100), 'r--', label='Perfect Fit (1:1)')
+ax.set_xlabel('Actual Impact Energy (J)')
+ax.set_ylabel('Predicted Impact Energy (J)')
+ax.set_title('EfficientNetB0 with FCNN Performance (MAE=' + str(round(test_mae*scaler.data_range_[0], 1)) + 'J)')
+ax.legend()
+
 
 # Scatter plot for Random Forest Regression Model
-ax1.scatter(y_test*scaler.data_range_[0], rf_predictions*scaler.data_range_[0], alpha=0.3, s=7)
-ax1.plot(np.linspace(0, 400, 100), np.linspace(0, 400, 100), 'r--')
+rf_scatter = ax1.scatter(y_test*scaler.data_range_[0], rf_predictions*scaler.data_range_[0], alpha=0.3, s=7, label='Data Points')
+ax1.plot(np.linspace(0, 400, 100), np.linspace(0, 400, 100), 'r--', label='Perfect Fit (1:1)')
 ax1.set_xlabel('Actual Impact Energy (J)')
 ax1.set_ylabel('Predicted Impact Energy (J)')
-ax1.set_title('Random Forest Regression Performance (MAE=' + str(round(rf_mae*scaler.data_range_[0], 3)) +'J)')
+ax1.set_title('EfficientNetB0 with RFR Performance (MAE=' + str(round(rf_mae*scaler.data_range_[0], 1)) +'J)')
+ax1.legend()
+ax1.set_ylim(ax.get_ylim())
 
 # Scatter plot for Support Vector Regression Model
-ax2.scatter(y_test*scaler.data_range_[0], svr_predictions*scaler.data_range_[0], alpha=0.3, s=7)
-ax2.plot(np.linspace(0, 400, 100), np.linspace(0, 400, 100), 'r--')
+svr_scatter = ax2.scatter(y_test*scaler.data_range_[0], svr_predictions*scaler.data_range_[0], alpha=0.3, s=7, label='Data Points')
+ax2.plot(np.linspace(0, 400, 100), np.linspace(0, 400, 100), 'r--', label='Perfect Fit (1:1)')
 ax2.set_xlabel('Actual Impact Energy (J)')
 ax2.set_ylabel('Predicted Impact Energy (J)')
-ax2.set_title('Support Vector Regression Performance (MAE=' + str(round(svr_mae*scaler.data_range_[0], 3)) +'J)')
+ax2.set_title('EfficientNetB0 with SVR Performance (MAE=' + str(round(svr_mae*scaler.data_range_[0], 1)) +'J)')
+ax2.legend()
+ax2.set_ylim(ax.get_ylim())
 
 # Display the plot
 plt.tight_layout()
@@ -305,12 +311,7 @@ plt.show()
 
 
 
-# plot architecture (Not working very well at the moment, will conduct manually with model summary)
-# import visualkeras
-# visualkeras.layered_view(model, legend=True).show() # display using your system viewer
-# visualkeras.layered_view(model, legend=True, to_file='output.png') # write to disk
-# visualkeras.layered_view(model, legend=True, to_file='output.png').show() # write and show
-#
+
 
 # UNFREEZE LAYERS TO FINE TUNE
 # def unfreeze_model(model):
